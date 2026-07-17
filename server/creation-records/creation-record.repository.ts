@@ -34,6 +34,17 @@ export function createCreationRecordRepository(database: AppDatabase) {
       return record
     },
     remove: (id: string) => remove.run(id).changes > 0,
+    replaceAll(records: CreationRecord[]) {
+      database.exec('BEGIN')
+      try {
+        database.exec('DELETE FROM creation_records')
+        for (const record of records) this.create(record)
+        database.exec('COMMIT')
+      } catch (error) {
+        database.exec('ROLLBACK')
+        throw error
+      }
+    },
   }
 }
 

@@ -9,5 +9,11 @@ export const creationRecordInputSchema = z.object({
   body: z.string().max(10000),
 })
 
+export const creationRecordSchema = creationRecordInputSchema.extend({
+  id: z.string().uuid(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
 export type CreationRecordInput = z.infer<typeof creationRecordInputSchema>
-export type CreationRecord = CreationRecordInput & { id: string; createdAt: string; updatedAt: string }
+export type CreationRecord = z.infer<typeof creationRecordSchema>

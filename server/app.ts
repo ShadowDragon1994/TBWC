@@ -20,7 +20,8 @@ export function createApp({ database, uploadDir }: { database: AppDatabase; uplo
   const app = express()
   const productService = createProductService(createProductRepository(database))
   const assetRepository = createAssetRepository(database)
-  const creationRecordService = createCreationRecordService(createCreationRecordRepository(database))
+  const creationRecordRepository = createCreationRecordRepository(database)
+  const creationRecordService = createCreationRecordService(creationRecordRepository)
   const upload = multer({
     storage: multer.diskStorage({ destination: uploadDir, filename: (_request, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -33,6 +34,8 @@ export function createApp({ database, uploadDir }: { database: AppDatabase; uplo
     restoreProducts: (products: Parameters<typeof productService.restore>[0]) => productService.restore(products),
     listAssets: () => assetRepository.listAll(),
     restoreAssets: (assets: Parameters<typeof assetRepository.replaceAll>[0]) => assetRepository.replaceAll(assets),
+    listCreationRecords: () => creationRecordRepository.list(),
+    restoreCreationRecords: (records: Parameters<typeof creationRecordRepository.replaceAll>[0]) => creationRecordRepository.replaceAll(records),
   }
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))

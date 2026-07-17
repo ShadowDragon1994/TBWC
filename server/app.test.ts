@@ -46,6 +46,10 @@ describe('product API', () => {
       .post(`/api/products/${created.body.data.id}/assets`)
       .attach('image', Buffer.from('fake png bytes'), { filename: 'sample.png', contentType: 'image/png' })
       .expect(201)
+    const savedCreation = await request(app).post('/api/creation-records').send({
+      productId: created.body.data.id, productName: '完整备份商品', platform: '通用',
+      title: '需要一起备份的文案', sellingPoints: ['卖点一'], body: '',
+    }).expect(201)
 
     const archive = await request(app)
       .get('/api/backup/archive')
@@ -59,6 +63,7 @@ describe('product API', () => {
       .expect(200)
 
     await request(app).delete(`/api/products/${created.body.data.id}`).expect(204)
+    await request(app).delete(`/api/creation-records/${savedCreation.body.data.id}`).expect(204)
     rmSync(join(uploadDir, uploaded.body.data.storedName))
     await request(app).post('/api/backup/archive').attach('backup', archive.body, 'backup.zip').expect(200)
 
@@ -66,6 +71,7 @@ describe('product API', () => {
     expect(restored.body.data[0]).toMatchObject({ name: '完整备份商品' })
     expect(restored.body.data[0].assets).toHaveLength(1)
     expect(existsSync(join(uploadDir, restored.body.data[0].assets[0].storedName))).toBe(true)
+    await request(app).get('/api/creation-records').expect(200).expect(response => expect(response.body.data[0].title).toBe('需要一起备份的文案'))
     database.close()
     rmSync(uploadDir, { recursive: true, force: true })
   })

@@ -5,6 +5,7 @@ import { z } from 'zod'
 import type { ProductAsset } from '../products/asset.repository'
 import type { Product } from '../products/product.types'
 import { backupSchema } from '../products/product.schema'
+import { creationRecordSchema, type CreationRecord } from '../creation-records/creation-record.schema'
 
 const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'] as const
 const assetSchema = z.object({
@@ -16,6 +17,7 @@ const archiveManifestSchema = z.object({
   version: z.literal(2), exportedAt: z.string(),
   products: backupSchema.shape.products,
   assets: z.array(assetSchema).max(10000),
+  creationRecords: z.array(creationRecordSchema).max(20000).default([]),
 })
 
 type BackupDependencies = {
@@ -24,13 +26,16 @@ type BackupDependencies = {
   restoreProducts: (products: Product[]) => unknown
   listAssets: () => ProductAsset[]
   restoreAssets: (assets: ProductAsset[]) => void
+  listCreationRecords: () => CreationRecord[]
+  restoreCreationRecords: (records: CreationRecord[]) => void
 }
 
 export async function createBackupArchive(dependencies: BackupDependencies) {
   const zip = new JSZip()
   const products = dependencies.listProducts()
   const assets = dependencies.listAssets()
-  zip.file('manifest.json', JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), products, assets }, null, 2))
+  const creationRecords = dependencies.listCreationRecords()
+  zip.file('manifest.json', JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), products, assets, creationRecords }, null, 2))
   for (const asset of assets) {
     if (basename(asset.storedName) !== asset.storedName) throw new Error('备份中存在无效图片文件名')
     zip.file(`uploads/${asset.storedName}`, await readFile(join(dependencies.uploadDir, asset.storedName)))
@@ -56,5 +61,6 @@ export async function restoreBackupArchive(buffer: Buffer, dependencies: BackupD
   for (const item of extracted) await writeFile(join(dependencies.uploadDir, item.asset.storedName), item.content, { flag: 'w' })
   dependencies.restoreProducts(manifest.products)
   dependencies.restoreAssets(manifest.assets)
-  return { products: manifest.products.length, assets: manifest.assets.length }
+  dependencies.restoreCreationRecords(manifest.creationRecords)
+  return { products: manifest.products.length, assets: manifest.assets.length, creationRecords: manifest.creationRecords.length }
 }
