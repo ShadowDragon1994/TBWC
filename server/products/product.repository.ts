@@ -36,6 +36,17 @@ export function createProductRepository(database: AppDatabase) {
       return this.find(id)
     },
     remove: (id: string) => remove.run(id).changes > 0,
+    replaceAll(products: Product[]) {
+      database.exec('BEGIN')
+      try {
+        database.exec('DELETE FROM products')
+        for (const product of products) this.create(product)
+        database.exec('COMMIT')
+      } catch (error) {
+        database.exec('ROLLBACK')
+        throw error
+      }
+    },
   }
 }
 

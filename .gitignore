@@ -4,5 +4,6 @@ dist/
 .env.local
 coverage/
 tmp/
+data/
 *.tsbuildinfo
 *.log

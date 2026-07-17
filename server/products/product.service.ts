@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { ProductRepository } from './product.repository'
 import type { ProductInput } from './product.types'
+import type { Product } from './product.types'
 
 export class ProductNotFoundError extends Error {}
 
@@ -22,6 +23,10 @@ export function createProductService(repository: ProductRepository) {
     },
     remove(id: string) {
       if (!repository.remove(id)) throw new ProductNotFoundError('商品不存在')
+    },
+    restore(products: Product[]) {
+      repository.replaceAll(products)
+      return repository.list()
     },
   }
 }
