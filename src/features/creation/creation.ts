@@ -11,9 +11,10 @@ const variants = [
   },
 ]
 
-export function generateMockContent(productId: string, variant = 0) {
-  if (productId !== 'bookmark-gift') throw new Error('未找到模拟商品')
-  return { ...variants[variant % variants.length], status: '待编辑' as const }
+export function generateMockContent(productId: string, variant = 0, productName = '东方花窗木质书签礼盒') {
+  const selected = variants[variant % variants.length]
+  if (productId === 'bookmark-gift') return { ...selected, status: '待编辑' as const }
+  return { ...selected, title: `${productName}｜节日心意礼`, status: '待编辑' as const }
 }
 
 export function checkCompliance(copy: string): Finding[] {

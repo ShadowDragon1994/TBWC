@@ -3,11 +3,14 @@ import { Archive, Box, Check, ChevronDown, CircleHelp, Download, FileImage, Home
 import productImage from './assets/bookmark-gift.png'
 import { checkCompliance, generateMockContent } from './features/creation/creation'
 import { mockProduct } from './features/products/mockProducts'
+import { ProductLibrary } from './features/products/ProductLibrary'
+import type { ProductRecord } from './features/products/products.api'
 
 const nav = [[Home, '今日工作台'], [Box, '商品库'], [Archive, '创作任务'], [Image, '模板与素材'], [Settings, '设置']] as const
 const exportOptions = ['主图 800×800', '详情页长图 750px', '竖版海报 3:4']
 
 export function App() {
+  const [currentProduct, setCurrentProduct] = useState<ProductRecord | typeof mockProduct>(mockProduct)
   const [variant, setVariant] = useState(0)
   const [content, setContent] = useState(() => generateMockContent(mockProduct.id, 0))
   const [generating, setGenerating] = useState(false)
@@ -25,14 +28,14 @@ export function App() {
     window.setTimeout(() => {
       const next = variant + 1
       setVariant(next)
-      setContent(generateMockContent(mockProduct.id, next))
+      setContent(generateMockContent(currentProduct.id, next, currentProduct.name))
       setGenerating(false)
       setNotice('已生成一组新的模拟文案')
     }, 650)
   }
 
   const exportBundle = () => {
-    const copy = `${content.title}\n\n${content.sellingPoints.map((point, index) => `${index + 1}. ${point}`).join('\n')}\n\n模拟商品：${mockProduct.name}`
+    const copy = `${content.title}\n\n${content.sellingPoints.map((point, index) => `${index + 1}. ${point}`).join('\n')}\n\n商品：${currentProduct.name}`
     const url = URL.createObjectURL(new Blob([copy], { type: 'text/plain;charset=utf-8' }))
     const anchor = document.createElement('a')
     anchor.href = url
@@ -46,12 +49,13 @@ export function App() {
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="seal">造</span><strong>造物台</strong></div>
-      <nav aria-label="主导航">{nav.map(([Icon, label]) => <button className={selectedNav === label ? 'active' : ''} key={label} onClick={() => { if (label === '今日工作台') setSelectedNav(label); setNotice(label === '今日工作台' ? '已返回今日工作台' : `${label}将在下一版本开放`) }}><Icon size={20}/><span>{label}</span></button>)}</nav>
+      <nav aria-label="主导航">{nav.map(([Icon, label]) => <button className={selectedNav === label ? 'active' : ''} key={label} onClick={() => { if (label === '今日工作台' || label === '商品库') setSelectedNav(label); setNotice(label === '今日工作台' ? '已返回今日工作台' : label === '商品库' ? '' : `${label}将在下一版本开放`) }}><Icon size={20}/><span>{label}</span></button>)}</nav>
       <div className="side-note">个人模式<br/><small>数据保存在本机</small></div>
     </aside>
 
     <main>
       <header className="topbar"><div/><button onClick={() => setNotice('可直接编辑文案；生成与导出目前使用模拟数据')}><CircleHelp size={17}/>使用帮助</button><span className="avatar">山</span></header>
+      {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name)); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : <>
       <section className="page-head">
         <div><h1>七夕礼赠创作任务</h1><div className="steps"><span className="done"><Check/>选择商品</span><i/><span className="current">2</span><b>生成内容</b><i/><span>3</span><b>审核调整</b><i/><span>4</span><b>导出完成</b></div></div>
         <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '内容生成中' : exported ? '已导出' : '待编辑'}</em></div><button className="primary" onClick={generate} disabled={generating}><Sparkles size={18}/>{generating ? '正在生成…' : '生成内容'}</button><button className="secondary" onClick={exportBundle}><Download size={18}/>导出素材包</button></div>
@@ -60,9 +64,9 @@ export function App() {
       <section className="workspace">
         <aside className="product-panel panel">
           <div className="panel-title">商品信息 <ChevronDown size={16}/></div>
-          <div className="product-summary"><img src={productImage} alt="东方花窗木质书签礼盒"/><div><strong>{mockProduct.name}</strong><b>¥{mockProduct.price.toFixed(2)}</b><small>材质：{mockProduct.material}</small></div></div>
+          <div className="product-summary"><img src={'assets' in currentProduct && currentProduct.assets?.[0]?.storedName ? `/uploads/${currentProduct.assets[0].storedName}` : productImage} alt={currentProduct.name}/><div><strong>{currentProduct.name}</strong><b>¥{currentProduct.price.toFixed(2)}</b><small>材质：{currentProduct.material || '未填写'}</small></div></div>
           <div className="divider"/><h3>产品卖点与信息</h3>
-          <Field label="材质" value={mockProduct.material}/><Field label="受众人群" value={mockProduct.audience}/><Field label="适用场景" value={mockProduct.scene}/><Field label="商品类目" value={mockProduct.category}/><Field label="价格" value={`${mockProduct.price.toFixed(2)} 元`}/>
+          <Field label="材质" value={currentProduct.material || '未填写'}/><Field label="受众人群" value={currentProduct.audience || '未填写'}/><Field label="适用场景" value={currentProduct.scene || '未填写'}/><Field label="商品类目" value={currentProduct.category}/><Field label="价格" value={`${currentProduct.price.toFixed(2)} 元`}/>
           <button className="soft" onClick={() => setNotice('模拟商品信息已刷新')}><RefreshCw size={15}/>更新商品信息</button>
         </aside>
 
@@ -83,6 +87,7 @@ export function App() {
       </section>
 
       <footer className="export-bar"><strong>导出规格</strong>{exportOptions.map(title => <ExportOption key={title} icon={<FileImage/>} title={title} selected={selectedExport === title} onSelect={() => setSelectedExport(title)}/>)}<div className="export-status"><small>导出状态</small><b>{exported ? '已完成 3/3' : '准备就绪 0/3'}</b><div><span className={exported ? 'complete' : ''}/></div></div></footer>
+      </>}
       {notice && <div className="toast" role="status"><Check size={16}/>{notice}<button aria-label="关闭提示" onClick={() => setNotice('')}>×</button></div>}
     </main>
   </div>

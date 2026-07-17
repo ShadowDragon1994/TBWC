@@ -4,10 +4,10 @@ import { describe, expect, it } from 'vitest'
 import { App } from './App'
 
 describe('App interactions', () => {
-  it('shows clear feedback when navigating to a future workspace', async () => {
+  it('opens the product library from navigation', async () => {
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: '商品库' }))
-    expect(screen.getByRole('status')).toHaveTextContent('商品库将在下一版本开放')
+    expect(screen.getByRole('heading', { name: '商品库' })).toBeInTheDocument()
   })
 
   it('switches the selected export specification', async () => {
