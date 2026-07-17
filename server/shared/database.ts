@@ -33,6 +33,17 @@ function migrate(database: AppDatabase) {
       size INTEGER NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS creation_records (
+      id TEXT PRIMARY KEY,
+      product_id TEXT REFERENCES products(id) ON DELETE SET NULL,
+      product_name TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      title TEXT NOT NULL,
+      selling_points TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `)
   database.exec('PRAGMA foreign_keys = ON;')
 }
