@@ -1,12 +1,14 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Archive, Box, Check, ChevronDown, CircleHelp, Download, FileImage, Home, Image, Lock, RefreshCw, Settings, Sparkles, TriangleAlert } from 'lucide-react'
+import { Archive, Box, Check, ChevronDown, CircleHelp, Download, FileImage, Home, Image, Lock, RefreshCw, Save, Settings, Sparkles, TriangleAlert } from 'lucide-react'
 import productImage from './assets/bookmark-gift.png'
 import { checkCompliance, generateMockContent } from './features/creation/creation'
 import { mockProduct } from './features/products/mockProducts'
 import { ProductLibrary } from './features/products/ProductLibrary'
 import type { ProductRecord } from './features/products/products.api'
+import { CreationRecords } from './features/creation-records/CreationRecords'
+import { creationRecordsApi } from './features/creation-records/creation-records.api'
 
-const nav = [[Home, '今日工作台'], [Box, '商品库'], [Archive, '创作任务'], [Image, '模板与素材'], [Settings, '设置']] as const
+const nav = [[Home, '今日工作台'], [Box, '商品库'], [Archive, '创作记录'], [Image, '模板与素材'], [Settings, '设置']] as const
 const exportOptions = ['主图 800×800', '详情页长图 750px', '竖版海报 3:4']
 
 export function App() {
@@ -21,6 +23,7 @@ export function App() {
   const [template, setTemplate] = useState(0)
   const [locked, setLocked] = useState(false)
   const [notice, setNotice] = useState('')
+  const [saving, setSaving] = useState(false)
   const findings = useMemo(() => checkCompliance(`${content.title} ${content.sellingPoints.join(' ')}`), [content])
 
   const generate = () => {
@@ -46,19 +49,34 @@ export function App() {
     setNotice(`${selectedExport}文案包已导出`)
   }
 
+  const saveCreation = async () => {
+    setSaving(true)
+    try {
+      await creationRecordsApi.create({
+        productId: currentProduct.id === mockProduct.id ? null : currentProduct.id,
+        productName: currentProduct.name,
+        platform: '通用',
+        title: content.title,
+        sellingPoints: content.sellingPoints,
+        body: '',
+      })
+      setNotice('创作记录已保存到本机')
+    } catch (error) { setNotice(error instanceof Error ? error.message : '保存创作记录失败') } finally { setSaving(false) }
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="seal">造</span><strong>造物台</strong></div>
-      <nav aria-label="主导航">{nav.map(([Icon, label]) => <button className={selectedNav === label ? 'active' : ''} key={label} onClick={() => { if (label === '今日工作台' || label === '商品库') setSelectedNav(label); setNotice(label === '今日工作台' ? '已返回今日工作台' : label === '商品库' ? '' : `${label}将在下一版本开放`) }}><Icon size={20}/><span>{label}</span></button>)}</nav>
+      <nav aria-label="主导航">{nav.map(([Icon, label]) => <button className={selectedNav === label ? 'active' : ''} key={label} onClick={() => { if (label === '今日工作台' || label === '商品库' || label === '创作记录') setSelectedNav(label); setNotice(label === '今日工作台' ? '已返回今日工作台' : label === '商品库' || label === '创作记录' ? '' : `${label}将在下一版本开放`) }}><Icon size={20}/><span>{label}</span></button>)}</nav>
       <div className="side-note">个人模式<br/><small>数据保存在本机</small></div>
     </aside>
 
     <main>
       <header className="topbar"><div/><button onClick={() => setNotice('可直接编辑文案；生成与导出目前使用模拟数据')}><CircleHelp size={17}/>使用帮助</button><span className="avatar">山</span></header>
-      {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name)); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : <>
+      {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name)); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : selectedNav === '创作记录' ? <CreationRecords/> : <>
       <section className="page-head">
         <div><h1>七夕礼赠创作任务</h1><div className="steps"><span className="done"><Check/>选择商品</span><i/><span className="current">2</span><b>生成内容</b><i/><span>3</span><b>审核调整</b><i/><span>4</span><b>导出完成</b></div></div>
-        <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '内容生成中' : exported ? '已导出' : '待编辑'}</em></div><button className="primary" onClick={generate} disabled={generating}><Sparkles size={18}/>{generating ? '正在生成…' : '生成内容'}</button><button className="secondary" onClick={exportBundle}><Download size={18}/>导出素材包</button></div>
+        <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '内容生成中' : exported ? '已导出' : '待编辑'}</em></div><button className="primary" onClick={generate} disabled={generating}><Sparkles size={18}/>{generating ? '正在生成…' : '生成内容'}</button><button className="secondary" onClick={() => void saveCreation()} disabled={saving}><Save size={18}/>{saving ? '保存中…' : '保存创作'}</button><button className="secondary" onClick={exportBundle}><Download size={18}/>导出素材包</button></div>
       </section>
 
       <section className="workspace">

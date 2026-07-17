@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 
 describe('App interactions', () => {
+  afterEach(() => vi.unstubAllGlobals())
   it('opens the product library from navigation', async () => {
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: '商品库' }))
@@ -21,5 +22,12 @@ describe('App interactions', () => {
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: '放大画布' }))
     expect(screen.getByText('60%')).toBeInTheDocument()
+  })
+
+  it('opens saved creation records from navigation', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '创作记录' }))
+    expect(screen.getByRole('heading', { name: '创作记录' })).toBeInTheDocument()
   })
 })
