@@ -1,0 +1,41 @@
+.plain-action {
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.editable input:disabled {
+  color: #8d857e;
+  cursor: not-allowed;
+}
+
+.template-1 .art-title {
+  right: 8%;
+  left: auto;
+  text-align: right;
+}
+
+.toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: 420px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  color: #fff;
+  background: #28231f;
+  box-shadow: 0 8px 24px #0003;
+  font-size: 13px;
+}
+
+.toast > svg { color: #8dd0a9; }
+.toast button { margin-left: 8px; border: 0; color: #fff; background: transparent; font-size: 20px; line-height: 1; }
+button { touch-action: manipulation; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+
+@media (max-width: 900px) {
+  .toast { right: 12px; bottom: 12px; left: 12px; }
+}
