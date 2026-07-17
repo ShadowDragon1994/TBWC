@@ -25,4 +25,14 @@ export const productsApi = {
   upload: (id: string, file: File) => { const data = new FormData(); data.append('image', file); return api<{ data: ProductAsset & { url: string } }>(`/api/products/${id}/assets`, { method: 'POST', body: data }) },
   backup: () => api<Record<string, unknown>>('/api/backup'),
   restore: (backup: unknown) => api<{ data: ProductRecord[] }>('/api/backup', json('POST', backup)),
+  backupArchive: async () => {
+    const response = await fetch('/api/backup/archive')
+    if (!response.ok) throw new Error('完整备份导出失败')
+    return response.blob()
+  },
+  restoreArchive: (file: File) => {
+    const data = new FormData()
+    data.append('backup', file)
+    return api<{ data: { products: number; assets: number } }>('/api/backup/archive', { method: 'POST', body: data })
+  },
 }

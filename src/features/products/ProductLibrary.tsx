@@ -45,16 +45,16 @@ export function ProductLibrary({ onUse }: { onUse: (product: ProductRecord) => v
     try { await productsApi.upload(product.id, file); setMessage('商品图片已上传'); await load() } catch (error) { setMessage(error instanceof Error ? error.message : '上传失败') }
   }
   const downloadBackup = async () => {
-    const backup = await productsApi.backup(); const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' })); const anchor = document.createElement('a'); anchor.href=url; anchor.download='造物台商品备份.json'; anchor.click(); URL.revokeObjectURL(url); setMessage('备份文件已导出')
+    try { const backup = await productsApi.backupArchive(); const url = URL.createObjectURL(backup); const anchor = document.createElement('a'); anchor.href=url; anchor.download=`zaowutai-backup-${new Date().toISOString().slice(0,10)}.zip`; anchor.click(); URL.revokeObjectURL(url); setMessage('完整备份已导出（包含商品图片）') } catch (error) { setMessage(error instanceof Error ? error.message : '完整备份导出失败') }
   }
   const restoreBackup = async (file?: File) => {
     if (!file) return
-    try { await productsApi.restore(JSON.parse(await file.text())); setMessage('备份已恢复'); await load() } catch (error) { setMessage(error instanceof Error ? error.message : '备份文件无效') }
+    try { await productsApi.restoreArchive(file); setMessage('完整备份已恢复（包含商品图片）'); await load() } catch (error) { setMessage(error instanceof Error ? error.message : 'ZIP 备份文件无效') }
   }
   const visible = products.filter(product => `${product.name} ${product.category}`.toLowerCase().includes(query.toLowerCase()))
 
   return <section className="library-page">
-    <div className="library-head"><div><h1>商品库</h1><p>商品资料和图片保存在这台电脑上。</p></div><div className="library-actions"><button onClick={downloadBackup}><Download size={16}/>导出备份</button><label className="button"><Upload size={16}/>恢复备份<input type="file" accept="application/json" onChange={event => void restoreBackup(event.target.files?.[0])}/></label><button className="primary" onClick={() => edit()}><Plus size={17}/>新增商品</button></div></div>
+    <div className="library-head"><div><h1>商品库</h1><p>商品资料和图片保存在这台电脑上。</p></div><div className="library-actions"><button onClick={() => void downloadBackup()}><Download size={16}/>导出完整备份</button><label className="button"><Upload size={16}/>恢复完整备份<input type="file" accept="application/zip,.zip" onChange={event => void restoreBackup(event.target.files?.[0])}/></label><button className="primary" onClick={() => edit()}><Plus size={17}/>新增商品</button></div></div>
     <div className="library-toolbar"><label><Search size={17}/><input aria-label="搜索商品" placeholder="搜索商品名称或类目" value={query} onChange={event => setQuery(event.target.value)}/></label><span>共 {products.length} 个商品</span></div>
     {message && <div className="library-message" role="status">{message}<button onClick={() => setMessage('')}>×</button></div>}
     {visible.length === 0 ? <div className="empty-products"><PackagePlus size={38}/><h2>还没有商品</h2><p>创建第一个商品，资料会写入本地 SQLite。</p><button className="primary" onClick={() => edit()}>新增商品</button></div> : <div className="product-grid">{visible.map(product => {

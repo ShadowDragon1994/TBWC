@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import request from 'supertest'
 import { createApp } from './app'
@@ -32,5 +35,38 @@ describe('product API', () => {
     const restored = await request(app).get('/api/products').expect(200)
     expect(restored.body.data[0].name).toBe('备份商品')
     database.close()
+  })
+
+  it('exports and restores products together with their uploaded images', async () => {
+    const uploadDir = mkdtempSync(join(tmpdir(), 'zaowutai-backup-'))
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir })
+    const created = await request(app).post('/api/products').send({ name: '完整备份商品', category: '文创', price: 20 }).expect(201)
+    const uploaded = await request(app)
+      .post(`/api/products/${created.body.data.id}/assets`)
+      .attach('image', Buffer.from('fake png bytes'), { filename: 'sample.png', contentType: 'image/png' })
+      .expect(201)
+
+    const archive = await request(app)
+      .get('/api/backup/archive')
+      .buffer(true)
+      .parse((response, callback) => {
+        const chunks: Buffer[] = []
+        response.on('data', chunk => chunks.push(Buffer.from(chunk)))
+        response.on('end', () => callback(null, Buffer.concat(chunks)))
+      })
+      .expect('Content-Type', /application\/zip/)
+      .expect(200)
+
+    await request(app).delete(`/api/products/${created.body.data.id}`).expect(204)
+    rmSync(join(uploadDir, uploaded.body.data.storedName))
+    await request(app).post('/api/backup/archive').attach('backup', archive.body, 'backup.zip').expect(200)
+
+    const restored = await request(app).get('/api/products').expect(200)
+    expect(restored.body.data[0]).toMatchObject({ name: '完整备份商品' })
+    expect(restored.body.data[0].assets).toHaveLength(1)
+    expect(existsSync(join(uploadDir, restored.body.data[0].assets[0].storedName))).toBe(true)
+    database.close()
+    rmSync(uploadDir, { recursive: true, force: true })
   })
 })

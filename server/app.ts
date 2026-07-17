@@ -10,6 +10,7 @@ import { createProductRepository } from './products/product.repository'
 import { createProductService, ProductNotFoundError } from './products/product.service'
 import { backupSchema, productInputSchema } from './products/product.schema'
 import { createAssetRepository } from './products/asset.repository'
+import { createBackupArchive, restoreBackupArchive } from './backup/backup.service'
 
 export function createApp({ database, uploadDir }: { database: AppDatabase; uploadDir: string }) {
   mkdirSync(uploadDir, { recursive: true })
@@ -21,6 +22,14 @@ export function createApp({ database, uploadDir }: { database: AppDatabase; uplo
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
     fileFilter: (_request, file, callback) => callback(null, ['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)),
   })
+  const backupUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024, files: 1 } })
+  const backupDependencies = {
+    uploadDir,
+    listProducts: () => productService.list(),
+    restoreProducts: (products: Parameters<typeof productService.restore>[0]) => productService.restore(products),
+    listAssets: () => assetRepository.listAll(),
+    restoreAssets: (assets: Parameters<typeof assetRepository.replaceAll>[0]) => assetRepository.replaceAll(assets),
+  }
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
   app.use(express.json({ limit: '2mb' }))
@@ -40,6 +49,20 @@ export function createApp({ database, uploadDir }: { database: AppDatabase; uplo
   })
   app.get('/api/backup', (_request, response) => response.json({ version: 1, exportedAt: new Date().toISOString(), products: productService.list() }))
   app.post('/api/backup', (request, response) => response.json({ data: productService.restore(backupSchema.parse(request.body).products) }))
+  app.get('/api/backup/archive', async (_request, response, next) => {
+    try {
+      const archive = await createBackupArchive(backupDependencies)
+      response.setHeader('Content-Type', 'application/zip')
+      response.setHeader('Content-Disposition', `attachment; filename="zaowutai-backup-${new Date().toISOString().slice(0, 10)}.zip"`)
+      response.send(archive)
+    } catch (error) { next(error) }
+  })
+  app.post('/api/backup/archive', backupUpload.single('backup'), async (request, response, next) => {
+    try {
+      if (!request.file) return response.status(422).json({ code: 'VALIDATION_ERROR', message: '请选择 ZIP 备份文件' })
+      response.json({ data: await restoreBackupArchive(request.file.buffer, backupDependencies) })
+    } catch (error) { next(error) }
+  })
 
   app.use((_request, response) => response.status(404).json({ code: 'NOT_FOUND', message: '接口不存在' }))
   const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
