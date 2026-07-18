@@ -1,4 +1,5 @@
 export type Finding = { level: 'warning' | 'pass'; term?: string; message: string }
+export type ContentPlatform = '小红书' | '抖音'
 
 const variants = [
   {
@@ -11,10 +12,23 @@ const variants = [
   },
 ]
 
-export function generateMockContent(productId: string, variant = 0, productName = '东方花窗木质书签礼盒') {
+export function generateMockContent(productId: string, variant = 0, productName = '东方花窗木质书签礼盒', platform: ContentPlatform = '小红书') {
   const selected = variants[variant % variants.length]
-  if (productId === 'bookmark-gift') return { ...selected, status: '待编辑' as const }
-  return { ...selected, title: `${productName}｜节日心意礼`, status: '待编辑' as const }
+  const title = productId === 'bookmark-gift' ? selected.title : `${productName}｜节日心意礼`
+  if (platform === '抖音') return {
+    ...selected,
+    platform,
+    title: variant % 2 === 0 ? `送礼不知道选什么？看看${productName}` : `${productName}，把东方心意送到手里`,
+    body: `【开场】送礼想要有心意，又不想千篇一律？\n【展示】这款${productName}，把东方设计和日常实用放在了一起。\n【卖点】${selected.sellingPoints.join('；')}。\n【行动引导】喜欢这种东方礼物，先收藏起来，需要送礼时再来看。`,
+    status: '待编辑' as const,
+  }
+  return {
+    ...selected,
+    platform,
+    title,
+    body: `最近发现一份很有东方气质的礼物——${productName}。\n\n${selected.sellingPoints.map(point => `✨ ${point}`).join('\n')}\n\n不张扬，但拆开很有仪式感，送朋友、同事或老师都很合适。\n\n#送礼灵感 #东方美学 #实用礼物`,
+    status: '待编辑' as const,
+  }
 }
 
 export function checkCompliance(copy: string): Finding[] {

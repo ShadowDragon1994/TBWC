@@ -14,6 +14,20 @@ describe('generateMockContent', () => {
     const second = generateMockContent('bookmark-gift', 1)
     expect(second.title).not.toBe(first.title)
   })
+
+  it('generates Xiaohongshu copy with a lifestyle body and topic tags', () => {
+    const result = generateMockContent('bookmark-gift', 0, '东方花窗木质书签礼盒', '小红书')
+    expect(result.platform).toBe('小红书')
+    expect(result.body).toContain('#送礼灵感')
+    expect(result.body).toContain('东方花窗木质书签礼盒')
+  })
+
+  it('generates Douyin copy with a spoken video script and call to action', () => {
+    const result = generateMockContent('bookmark-gift', 0, '东方花窗木质书签礼盒', '抖音')
+    expect(result.platform).toBe('抖音')
+    expect(result.body).toContain('【开场】')
+    expect(result.body).toContain('【行动引导】')
+  })
 })
 
 describe('checkCompliance', () => {
