@@ -42,6 +42,7 @@
 .toast button { margin-left: 8px; border: 0; color: #fff; background: transparent; font-size: 20px; line-height: 1; }
 button { touch-action: manipulation; }
 button:focus-visible, input:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; }
+.records-grid footer .continue { margin-right: auto; border-color: var(--red); color: var(--red); }
 
 @media (max-width: 900px) {
   .toast { right: 12px; bottom: 12px; left: 12px; }

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Archive, Box, Check, ChevronDown, CircleHelp, Download, FileImage, Home, Image, Lock, RefreshCw, Save, Settings, Sparkles, TriangleAlert } from 'lucide-react'
 import productImage from './assets/bookmark-gift.png'
 import { checkCompliance, generateMockContent, type ContentPlatform } from './features/creation/creation'
@@ -6,15 +6,32 @@ import { mockProduct } from './features/products/mockProducts'
 import { ProductLibrary } from './features/products/ProductLibrary'
 import type { ProductRecord } from './features/products/products.api'
 import { CreationRecords } from './features/creation-records/CreationRecords'
-import { creationRecordsApi } from './features/creation-records/creation-records.api'
+import { creationRecordsApi, type CreationRecord } from './features/creation-records/creation-records.api'
 
 const nav = [[Home, '今日工作台'], [Box, '商品库'], [Archive, '创作记录'], [Image, '模板与素材'], [Settings, '设置']] as const
 const exportOptions = ['主图 800×800', '详情页长图 750px', '竖版海报 3:4']
+const localDraftKey = 'zaowutai.creation-draft'
+
+function readLocalDraft() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(localDraftKey) ?? 'null') as Record<string, unknown> | null
+    const product = draft?.product as Record<string, unknown> | undefined
+    const content = draft?.content as Record<string, unknown> | undefined
+    if (draft?.version !== 1 || (draft.platform !== '小红书' && draft.platform !== '抖音') || typeof product?.id !== 'string' || typeof product.name !== 'string' || typeof product.price !== 'number' || typeof content?.title !== 'string' || typeof content.body !== 'string' || !Array.isArray(content.sellingPoints) || !content.sellingPoints.every(point => typeof point === 'string')) return null
+    return {
+      platform: draft.platform as ContentPlatform,
+      product: product as ProductRecord | typeof mockProduct,
+      content: { platform: draft.platform as ContentPlatform, title: content.title, sellingPoints: content.sellingPoints as string[], body: content.body, status: '待编辑' as const },
+      editingRecordId: typeof draft.editingRecordId === 'string' ? draft.editingRecordId : null,
+    }
+  } catch { return null }
+}
 
 export function App() {
-  const [currentProduct, setCurrentProduct] = useState<ProductRecord | typeof mockProduct>(mockProduct)
+  const [initialDraft] = useState(readLocalDraft)
+  const [currentProduct, setCurrentProduct] = useState<ProductRecord | typeof mockProduct>(initialDraft?.product ?? mockProduct)
   const [variant, setVariant] = useState(0)
-  const [content, setContent] = useState(() => generateMockContent(mockProduct.id, 0))
+  const [content, setContent] = useState(() => initialDraft?.content ?? generateMockContent(mockProduct.id, 0))
   const [generating, setGenerating] = useState(false)
   const [exported, setExported] = useState(false)
   const [selectedNav, setSelectedNav] = useState('今日工作台')
@@ -24,8 +41,14 @@ export function App() {
   const [locked, setLocked] = useState(false)
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
-  const [platform, setPlatform] = useState<ContentPlatform>('小红书')
+  const [platform, setPlatform] = useState<ContentPlatform>(initialDraft?.platform ?? '小红书')
+  const [editingRecordId, setEditingRecordId] = useState<string | null>(initialDraft?.editingRecordId ?? null)
   const findings = useMemo(() => checkCompliance(`${content.title} ${content.sellingPoints.join(' ')} ${content.body}`), [content])
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => localStorage.setItem(localDraftKey, JSON.stringify({ version: 1, platform, product: currentProduct, content, editingRecordId })), 500)
+    return () => window.clearTimeout(timer)
+  }, [platform, currentProduct, content, editingRecordId])
 
   const generate = () => {
     setGenerating(true)
@@ -53,15 +76,17 @@ export function App() {
   const saveCreation = async () => {
     setSaving(true)
     try {
-      await creationRecordsApi.create({
+      const draft = {
         productId: currentProduct.id === mockProduct.id ? null : currentProduct.id,
         productName: currentProduct.name,
         platform,
         title: content.title,
         sellingPoints: content.sellingPoints,
         body: content.body,
-      })
-      setNotice('创作记录已保存到本机')
+      }
+      const saved = editingRecordId ? await creationRecordsApi.update(editingRecordId, draft) : await creationRecordsApi.create(draft)
+      setEditingRecordId(saved.data.id)
+      setNotice(editingRecordId ? '创作记录已更新' : '创作记录已保存到本机')
     } catch (error) { setNotice(error instanceof Error ? error.message : '保存创作记录失败') } finally { setSaving(false) }
   }
 
@@ -74,9 +99,9 @@ export function App() {
 
     <main>
       <header className="topbar"><div/><button onClick={() => setNotice('可直接编辑文案；生成与导出目前使用模拟数据')}><CircleHelp size={17}/>使用帮助</button><span className="avatar">山</span></header>
-      {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name, platform)); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : selectedNav === '创作记录' ? <CreationRecords/> : <>
+      {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name, platform)); setEditingRecordId(null); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : selectedNav === '创作记录' ? <CreationRecords onContinue={(record: CreationRecord) => { const recordPlatform: ContentPlatform = record.platform === '抖音' ? '抖音' : '小红书'; setCurrentProduct({ ...mockProduct, id: record.productId ?? mockProduct.id, name: record.productName }); setPlatform(recordPlatform); setContent({ platform: recordPlatform, title: record.title, sellingPoints: record.sellingPoints, body: record.body, status: '待编辑' }); setEditingRecordId(record.id); setSelectedNav('今日工作台'); setNotice('已载入历史创作，可继续修改') }}/> : <>
       <section className="page-head">
-        <div><h1>七夕礼赠创作任务</h1><div className="steps"><span className="done"><Check/>选择商品</span><i/><span className="current">2</span><b>生成内容</b><i/><span>3</span><b>审核调整</b><i/><span>4</span><b>导出完成</b></div></div>
+        <div><h1>{currentProduct.name}创作任务</h1><div className="steps"><span className="done"><Check/>选择商品</span><i/><span className="current">2</span><b>生成内容</b><i/><span>3</span><b>审核调整</b><i/><span>4</span><b>导出完成</b></div></div>
         <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '内容生成中' : exported ? '已导出' : '待编辑'}</em></div><button className="primary" onClick={generate} disabled={generating}><Sparkles size={18}/>{generating ? '正在生成…' : '生成内容'}</button><button className="secondary" onClick={() => void saveCreation()} disabled={saving}><Save size={18}/>{saving ? '保存中…' : '保存创作'}</button><button className="secondary" onClick={exportBundle}><Download size={18}/>导出素材包</button></div>
       </section>
 

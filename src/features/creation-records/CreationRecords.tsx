@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Clipboard, FileText, Search, Trash2 } from 'lucide-react'
+import { Clipboard, FileText, Pencil, Search, Trash2 } from 'lucide-react'
 import { creationRecordsApi, type CreationRecord } from './creation-records.api'
 import './creation-records.css'
 
-export function CreationRecords() {
+export function CreationRecords({ onContinue }: { onContinue: (record: CreationRecord) => void }) {
   const [records, setRecords] = useState<CreationRecord[]>([])
   const [query, setQuery] = useState('')
   const [message, setMessage] = useState('')
@@ -33,7 +33,7 @@ export function CreationRecords() {
       <h2>{record.title}</h2><p className="record-product">关联商品：{record.productName}</p>
       <ol>{record.sellingPoints.map((point, index) => <li key={index}>{point}</li>)}</ol>
       {record.body && <p className="record-body">{record.body}</p>}
-      <footer><button onClick={() => void copy(record)}><Clipboard/>复制文案</button><button aria-label="删除创作记录" onClick={() => void remove(record)}><Trash2/></button></footer>
+      <footer><button className="continue" onClick={() => onContinue(record)}><Pencil/>继续创作</button><button onClick={() => void copy(record)}><Clipboard/>复制文案</button><button aria-label="删除创作记录" onClick={() => void remove(record)}><Trash2/></button></footer>
     </article>)}</div>}
   </section>
 }
