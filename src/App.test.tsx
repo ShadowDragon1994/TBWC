@@ -30,4 +30,11 @@ describe('App interactions', () => {
     await userEvent.click(screen.getByRole('button', { name: '创作记录' }))
     expect(screen.getByRole('heading', { name: '创作记录' })).toBeInTheDocument()
   })
+
+  it('switches between Xiaohongshu and Douyin platform copy', async () => {
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '抖音' }))
+    expect(screen.getByRole('button', { name: '抖音' })).toHaveAttribute('aria-pressed', 'true')
+    expect((screen.getByLabelText('正文脚本') as HTMLTextAreaElement).value).toContain('【开场】')
+  })
 })
