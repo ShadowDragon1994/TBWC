@@ -7,6 +7,8 @@ import { ProductLibrary } from './features/products/ProductLibrary'
 import type { ProductRecord } from './features/products/products.api'
 import { CreationRecords } from './features/creation-records/CreationRecords'
 import { creationRecordsApi, type CreationRecord } from './features/creation-records/creation-records.api'
+import { AiSettingsPage } from './features/ai/AiSettingsPage'
+import { aiApi, type AiSettings } from './features/ai/ai.api'
 
 const nav = [[Home, '今日工作台'], [Box, '商品库'], [Archive, '创作记录'], [Image, '模板与素材'], [Settings, '设置']] as const
 const exportOptions = ['主图 800×800', '详情页长图 750px', '竖版海报 3:4']
@@ -43,6 +45,8 @@ export function App() {
   const [saving, setSaving] = useState(false)
   const [platform, setPlatform] = useState<ContentPlatform>(initialDraft?.platform ?? '小红书')
   const [editingRecordId, setEditingRecordId] = useState<string | null>(initialDraft?.editingRecordId ?? null)
+  const [guidance, setGuidance] = useState('')
+  const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
   const findings = useMemo(() => checkCompliance(`${content.title} ${content.sellingPoints.join(' ')} ${content.body}`), [content])
 
   useEffect(() => {
@@ -50,15 +54,23 @@ export function App() {
     return () => window.clearTimeout(timer)
   }, [platform, currentProduct, content, editingRecordId])
 
-  const generate = () => {
+  const generate = async () => {
     setGenerating(true)
-    window.setTimeout(() => {
+    try {
+      const settings = aiSettings ?? (await aiApi.settings()).data
+      setAiSettings(settings)
       const next = variant + 1
       setVariant(next)
-      setContent(generateMockContent(currentProduct.id, next, currentProduct.name, platform))
-      setGenerating(false)
-      setNotice('已生成一组新的模拟文案')
-    }, 650)
+      if (settings.mode === 'real') {
+        const { data } = await aiApi.generate({ platform, product: { name: currentProduct.name, category: currentProduct.category, price: currentProduct.price, material: currentProduct.material, audience: currentProduct.audience, scene: currentProduct.scene, sellingPoints: 'sellingPoints' in currentProduct ? currentProduct.sellingPoints : '', forbiddenTerms: 'forbiddenTerms' in currentProduct ? currentProduct.forbiddenTerms : '' }, guidance })
+        setContent({ ...data, platform, status: '待编辑' })
+        setNotice('真实 AI 文案已生成')
+      } else {
+        await new Promise(resolve => window.setTimeout(resolve, 650))
+        setContent(generateMockContent(currentProduct.id, next, currentProduct.name, platform))
+        setNotice('已生成一组新的模拟文案')
+      }
+    } catch (error) { setNotice(error instanceof Error ? error.message : '内容生成失败') } finally { setGenerating(false) }
   }
 
   const exportBundle = () => {
@@ -93,16 +105,16 @@ export function App() {
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="seal">造</span><strong>造物台</strong></div>
-      <nav aria-label="主导航">{nav.map(([Icon, label]) => <button className={selectedNav === label ? 'active' : ''} key={label} onClick={() => { if (label === '今日工作台' || label === '商品库' || label === '创作记录') setSelectedNav(label); setNotice(label === '今日工作台' ? '已返回今日工作台' : label === '商品库' || label === '创作记录' ? '' : `${label}将在下一版本开放`) }}><Icon size={20}/><span>{label}</span></button>)}</nav>
+      <nav aria-label="主导航">{nav.map(([Icon, label]) => <button className={selectedNav === label ? 'active' : ''} key={label} onClick={() => { if (label === '今日工作台' || label === '商品库' || label === '创作记录' || label === '设置') setSelectedNav(label); setNotice(label === '今日工作台' ? '已返回今日工作台' : label === '模板与素材' ? `${label}将在下一版本开放` : '') }}><Icon size={20}/><span>{label}</span></button>)}</nav>
       <div className="side-note">个人模式<br/><small>数据保存在本机</small></div>
     </aside>
 
     <main>
       <header className="topbar"><div/><button onClick={() => setNotice('可直接编辑文案；生成与导出目前使用模拟数据')}><CircleHelp size={17}/>使用帮助</button><span className="avatar">山</span></header>
-      {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name, platform)); setEditingRecordId(null); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : selectedNav === '创作记录' ? <CreationRecords onContinue={(record: CreationRecord) => { const recordPlatform: ContentPlatform = record.platform === '抖音' ? '抖音' : '小红书'; setCurrentProduct({ ...mockProduct, id: record.productId ?? mockProduct.id, name: record.productName }); setPlatform(recordPlatform); setContent({ platform: recordPlatform, title: record.title, sellingPoints: record.sellingPoints, body: record.body, status: '待编辑' }); setEditingRecordId(record.id); setSelectedNav('今日工作台'); setNotice('已载入历史创作，可继续修改') }}/> : <>
+      {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name, platform)); setEditingRecordId(null); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : selectedNav === '创作记录' ? <CreationRecords onContinue={(record: CreationRecord) => { const recordPlatform: ContentPlatform = record.platform === '抖音' ? '抖音' : '小红书'; setCurrentProduct({ ...mockProduct, id: record.productId ?? mockProduct.id, name: record.productName }); setPlatform(recordPlatform); setContent({ platform: recordPlatform, title: record.title, sellingPoints: record.sellingPoints, body: record.body, status: '待编辑' }); setEditingRecordId(record.id); setSelectedNav('今日工作台'); setNotice('已载入历史创作，可继续修改') }}/> : selectedNav === '设置' ? <AiSettingsPage onSaved={settings => setAiSettings(settings)}/> : <>
       <section className="page-head">
         <div><h1>{currentProduct.name}创作任务</h1><div className="steps"><span className="done"><Check/>选择商品</span><i/><span className="current">2</span><b>生成内容</b><i/><span>3</span><b>审核调整</b><i/><span>4</span><b>导出完成</b></div></div>
-        <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '内容生成中' : exported ? '已导出' : '待编辑'}</em></div><button className="primary" onClick={generate} disabled={generating}><Sparkles size={18}/>{generating ? '正在生成…' : '生成内容'}</button><button className="secondary" onClick={() => void saveCreation()} disabled={saving}><Save size={18}/>{saving ? '保存中…' : '保存创作'}</button><button className="secondary" onClick={exportBundle}><Download size={18}/>导出素材包</button></div>
+        <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '内容生成中' : exported ? '已导出' : '待编辑'}</em></div><button className="primary" onClick={() => void generate()} disabled={generating}><Sparkles size={18}/>{generating ? '正在生成…' : '生成内容'}</button><button className="secondary" onClick={() => void saveCreation()} disabled={saving}><Save size={18}/>{saving ? '保存中…' : '保存创作'}</button><button className="secondary" onClick={exportBundle}><Download size={18}/>导出素材包</button></div>
       </section>
 
       <section className="workspace">
@@ -124,9 +136,10 @@ export function App() {
           <section className="panel copy-panel"><div className="panel-title">文案内容 <button className="plain-action" onClick={() => setLocked(value => !value)}><Lock size={14}/>{locked ? '全部解锁' : '全部锁定'}</button></div>
             <div className="platform-switch" aria-label="内容平台">{(['小红书', '抖音'] as ContentPlatform[]).map(option => <button key={option} aria-pressed={platform === option} onClick={() => { setPlatform(option); setVariant(0); setContent(generateMockContent(currentProduct.id, 0, currentProduct.name, option)); setNotice(`已切换为${option}文案结构`) }}>{option}</button>)}</div>
             <label>生成标题 <small>{content.title.length}/30</small></label><div className="editable"><input aria-label="生成标题" disabled={locked} value={content.title} onChange={event => setContent({...content, title:event.target.value})}/><Lock size={15}/></div>
-            <button className="regen" onClick={generate}><RefreshCw size={14}/>重新生成</button>
+            <button className="regen" onClick={() => void generate()}><RefreshCw size={14}/>重新生成</button>
             <label>产品卖点 <small>3/3</small></label>{content.sellingPoints.map((point, index) => <div className="editable point" key={index}><i>{index + 1}</i><input aria-label={`产品卖点 ${index + 1}`} disabled={locked} value={point} onChange={event => { const points=[...content.sellingPoints]; points[index]=event.target.value; setContent({...content,sellingPoints:points})}}/><Lock size={15}/></div>)}
             <label>{platform === '抖音' ? '口播脚本' : '正文笔记'} <small>{content.body.length}/10000</small></label><textarea aria-label="正文脚本" disabled={locked} value={content.body} onChange={event => setContent({...content, body:event.target.value})}/>
+            <label>补充要求 <small>{guidance.length}/1000</small></label><textarea className="guidance" aria-label="补充要求" disabled={locked} value={guidance} onChange={event => setGuidance(event.target.value)} placeholder="例如：语气自然、突出送老师场景"/>
           </section>
           <section className="panel compliance"><div className="panel-title">合规检测 <button onClick={() => setNotice('合规检测已更新')}><RefreshCw size={14}/>重新检测</button></div>{findings.map((finding, index) => <div className={finding.level} key={index}>{finding.level === 'warning' ? <TriangleAlert/> : <Check/>}<span>{finding.message}</span>{finding.level === 'warning' && <button onClick={() => { setContent({...content,title:content.title.replaceAll('限量','限定'),sellingPoints:content.sellingPoints.map(point=>point.replaceAll('限量','限定'))}); setNotice('风险表达已替换为“限定”') }}>去修改</button>}</div>)}</section>
         </aside>

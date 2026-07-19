@@ -55,4 +55,22 @@ describe('App interactions', () => {
     expect(screen.getByLabelText('生成标题')).toHaveValue('自动恢复标题')
     expect(screen.getByLabelText('正文脚本')).toHaveValue('自动恢复正文')
   })
+
+  it('opens local AI settings from navigation', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { mode: 'mock', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1-mini', hasApiKey: false, updatedAt: null } }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '设置' }))
+    expect(await screen.findByRole('heading', { name: 'AI 生成设置' })).toBeInTheDocument()
+  })
+
+  it('uses the local gateway when real AI mode is enabled', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'model', hasApiKey: true, updatedAt: null } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { title: 'AI 真实标题', sellingPoints: ['真实卖点'], body: 'AI 真实正文', source: 'ai' } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '生成内容' }))
+    expect(await screen.findByText('真实 AI 文案已生成')).toBeInTheDocument()
+    expect(screen.getByLabelText('生成标题')).toHaveValue('AI 真实标题')
+  })
 })
