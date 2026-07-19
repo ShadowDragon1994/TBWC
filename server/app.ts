@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { extname } from 'node:path'
 import express, { type ErrorRequestHandler } from 'express'
 import helmet from 'helmet'
@@ -14,14 +14,19 @@ import { createBackupArchive, restoreBackupArchive } from './backup/backup.servi
 import { createCreationRecordRepository } from './creation-records/creation-record.repository'
 import { creationRecordInputSchema } from './creation-records/creation-record.schema'
 import { createCreationRecordService, CreationRecordNotFoundError } from './creation-records/creation-record.service'
+import { createAiSettingsRepository } from './ai/ai.repository'
+import { aiGenerateInputSchema, aiSettingsInputSchema } from './ai/ai.schema'
+import { createAiService, AiConfigurationError, AiUpstreamError } from './ai/ai.service'
+import { createSecretService } from './ai/secret.service'
 
-export function createApp({ database, uploadDir }: { database: AppDatabase; uploadDir: string }) {
+export function createApp({ database, uploadDir, encryptionKey = randomBytes(32), fetchImpl = fetch }: { database: AppDatabase; uploadDir: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
   const app = express()
   const productService = createProductService(createProductRepository(database))
   const assetRepository = createAssetRepository(database)
   const creationRecordRepository = createCreationRecordRepository(database)
   const creationRecordService = createCreationRecordService(creationRecordRepository)
+  const aiService = createAiService(createAiSettingsRepository(database), createSecretService(encryptionKey), fetchImpl)
   const upload = multer({
     storage: multer.diskStorage({ destination: uploadDir, filename: (_request, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -74,12 +79,22 @@ export function createApp({ database, uploadDir }: { database: AppDatabase; uplo
   app.post('/api/creation-records', (request, response) => response.status(201).json({ data: creationRecordService.create(creationRecordInputSchema.parse(request.body)) }))
   app.put('/api/creation-records/:id', (request, response) => response.json({ data: creationRecordService.update(String(request.params.id), creationRecordInputSchema.parse(request.body)) }))
   app.delete('/api/creation-records/:id', (request, response) => { creationRecordService.remove(String(request.params.id)); response.status(204).end() })
+  app.get('/api/ai/settings', (_request, response) => response.json({ data: aiService.getSettings() }))
+  app.put('/api/ai/settings', (request, response) => response.json({ data: aiService.saveSettings(aiSettingsInputSchema.parse(request.body)) }))
+  app.post('/api/ai/test', async (_request, response, next) => {
+    try { response.json({ data: await aiService.testConnection() }) } catch (error) { next(error) }
+  })
+  app.post('/api/ai/generate', async (request, response, next) => {
+    try { response.json({ data: await aiService.generate(aiGenerateInputSchema.parse(request.body)) }) } catch (error) { next(error) }
+  })
 
   app.use((_request, response) => response.status(404).json({ code: 'NOT_FOUND', message: '接口不存在' }))
   const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
     if (error instanceof ZodError) return response.status(422).json({ code: 'VALIDATION_ERROR', message: '输入信息不完整或格式错误', fields: error.issues })
     if (error instanceof ProductNotFoundError) return response.status(404).json({ code: 'NOT_FOUND', message: error.message })
     if (error instanceof CreationRecordNotFoundError) return response.status(404).json({ code: 'NOT_FOUND', message: error.message })
+    if (error instanceof AiConfigurationError) return response.status(422).json({ code: 'AI_CONFIGURATION_ERROR', message: error.message })
+    if (error instanceof AiUpstreamError) return response.status(502).json({ code: 'AI_UPSTREAM_ERROR', message: error.message })
     if (error instanceof multer.MulterError) return response.status(422).json({ code: 'UPLOAD_ERROR', message: error.code === 'LIMIT_FILE_SIZE' ? '图片不能超过 10MB' : '图片上传失败' })
     process.stderr.write(`${JSON.stringify({ level: 'error', message: error instanceof Error ? error.message : 'unknown error' })}\n`)
     response.status(500).json({ code: 'INTERNAL_ERROR', message: '服务暂时不可用' })

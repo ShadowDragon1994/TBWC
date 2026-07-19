@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from './app'
 import { createTestDatabase } from './shared/database'
@@ -104,6 +104,39 @@ describe('creation record API', () => {
     }).expect(200).expect(response => expect(response.body.data.platform).toBe('淘宝'))
     await request(app).delete(`/api/creation-records/${created.body.data.id}`).expect(204)
     await request(app).get('/api/creation-records').expect(200).expect(response => expect(response.body.data).toEqual([]))
+    database.close()
+  })
+})
+
+describe('AI gateway API', () => {
+  it('stores the API key encrypted and never returns it to the browser', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads', encryptionKey: Buffer.alloc(32, 7) })
+    await request(app).put('/api/ai/settings').send({ mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'example-model', apiKey: 'sk-private-value' }).expect(200)
+    const settings = await request(app).get('/api/ai/settings').expect(200)
+    expect(settings.body.data).toMatchObject({ mode: 'real', model: 'example-model', hasApiKey: true })
+    expect(JSON.stringify(settings.body)).not.toContain('sk-private-value')
+    database.close()
+  })
+
+  it('generates validated platform copy through the configured compatible API', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ title: '真实生成标题', sellingPoints: ['卖点一', '卖点二'], body: '真实生成正文' }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads', encryptionKey: Buffer.alloc(32, 9), fetchImpl })
+    await request(app).put('/api/ai/settings').send({ mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'example-model', apiKey: 'sk-test' }).expect(200)
+    const generated = await request(app).post('/api/ai/generate').send({ platform: '小红书', product: { name: '青瓷杯', category: '茶具', price: 89, material: '陶瓷', audience: '喜欢喝茶的人', scene: '书桌', sellingPoints: '釉色温润', forbiddenTerms: '' }, guidance: '语气自然' }).expect(200)
+    expect(generated.body.data).toMatchObject({ title: '真实生成标题', body: '真实生成正文', source: 'ai' })
+    expect(fetchImpl).toHaveBeenCalledWith('https://api.example.com/v1/chat/completions', expect.objectContaining({ method: 'POST' }))
+    database.close()
+  })
+
+  it('tests the configured AI connection without exposing credentials', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads', encryptionKey: Buffer.alloc(32, 3), fetchImpl })
+    await request(app).put('/api/ai/settings').send({ mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'example-model', apiKey: 'sk-test' }).expect(200)
+    await request(app).post('/api/ai/test').expect(200).expect(response => expect(response.body.data.connected).toBe(true))
+    expect(fetchImpl).toHaveBeenCalledWith('https://api.example.com/v1/models', expect.objectContaining({ method: 'GET' }))
     database.close()
   })
 })

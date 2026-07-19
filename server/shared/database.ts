@@ -44,6 +44,14 @@ function migrate(database: AppDatabase) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS ai_settings (
+      id INTEGER PRIMARY KEY CHECK(id = 1),
+      mode TEXT NOT NULL CHECK(mode IN ('mock','real')),
+      base_url TEXT NOT NULL,
+      model TEXT NOT NULL,
+      encrypted_api_key TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL
+    );
   `)
   database.exec('PRAGMA foreign_keys = ON;')
 }
