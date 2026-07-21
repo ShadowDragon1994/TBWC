@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { checkCompliance, generateMockContent } from './creation'
+import { analyzePlatformContent, checkCompliance, generateMockContent } from './creation'
 
 describe('generateMockContent', () => {
   it('generates structured content from the selected mock product', () => {
@@ -40,5 +40,19 @@ describe('checkCompliance', () => {
   it('returns passing checks for safe copy', () => {
     const findings = checkCompliance('东方花窗书签，适合作为节日伴手礼')
     expect(findings.every((finding) => finding.level === 'pass')).toBe(true)
+  })
+})
+
+describe('analyzePlatformContent', () => {
+  it('checks Xiaohongshu title length, topic tags and custom forbidden terms', () => {
+    const result = analyzePlatformContent('小红书', '这是一个超过二十个汉字且明显太长的小红书笔记标题示例', '正文没有话题标签，保证最好用', ['保证', '最好'])
+    expect(result.metrics).toMatchObject({ titleLength: 26, topicCount: 0 })
+    expect(result.findings.map(item => item.message)).toEqual(expect.arrayContaining([expect.stringContaining('标题建议控制在 20 字以内'), expect.stringContaining('建议添加 3～5 个话题'), expect.stringContaining('保证、最好')]))
+  })
+
+  it('estimates Douyin speaking time and checks script sections', () => {
+    const result = analyzePlatformContent('抖音', '标题', '这是一段没有结构标记的短口播稿。'.repeat(30), [])
+    expect(result.metrics.estimatedSeconds).toBeGreaterThan(30)
+    expect(result.findings.some(item => item.message.includes('开场、展示、卖点和行动引导'))).toBe(true)
   })
 })

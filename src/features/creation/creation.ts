@@ -1,5 +1,6 @@
 export type Finding = { level: 'warning' | 'pass'; term?: string; message: string }
 export type ContentPlatform = '小红书' | '抖音'
+export type QualityFinding = { level: 'warning' | 'pass'; message: string }
 
 const variants = [
   {
@@ -45,4 +46,24 @@ export function checkCompliance(copy: string): Finding[] {
     { level: 'pass', message: '未检测到虚假宣传风险' },
     { level: 'pass', message: '素材授权记录完整' },
   ]
+}
+
+export function analyzePlatformContent(platform: ContentPlatform, title: string, body: string, forbiddenTerms: string[]) {
+  const titleLength = Array.from(title.trim()).length
+  const topicCount = (body.match(/#[^\s#]+/g) ?? []).length
+  const spokenCharacters = Array.from(body.replace(/【[^】]+】|\s|[，。！？、；：,.!?]/g, '')).length
+  const estimatedSeconds = Math.ceil(spokenCharacters / 4)
+  const findings: QualityFinding[] = []
+  const matchedTerms = [...new Set(forbiddenTerms.map(term => term.trim()).filter(term => term && `${title} ${body}`.includes(term)))]
+  if (matchedTerms.length) findings.push({ level: 'warning', message: `发现自定义违禁词：${matchedTerms.join('、')}` })
+  if (platform === '小红书') {
+    findings.push(titleLength > 20 ? { level: 'warning', message: `标题建议控制在 20 字以内，当前 ${titleLength} 字` } : { level: 'pass', message: `标题长度合适（${titleLength}/20）` })
+    findings.push(topicCount < 3 || topicCount > 5 ? { level: 'warning', message: `建议添加 3～5 个话题，当前 ${topicCount} 个` } : { level: 'pass', message: `话题数量合适（${topicCount} 个）` })
+  } else {
+    const sections = ['【开场】', '【展示】', '【卖点】', '【行动引导】']
+    findings.push(sections.every(section => body.includes(section)) ? { level: 'pass', message: '口播结构完整' } : { level: 'warning', message: '建议包含开场、展示、卖点和行动引导' })
+    findings.push(estimatedSeconds > 60 ? { level: 'warning', message: `预计口播 ${estimatedSeconds} 秒，建议控制在 60 秒内` } : { level: 'pass', message: `预计口播 ${estimatedSeconds} 秒` })
+  }
+  if (!matchedTerms.length) findings.push({ level: 'pass', message: '未发现自定义违禁词' })
+  return { metrics: { titleLength, topicCount, estimatedSeconds }, findings }
 }
