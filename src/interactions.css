@@ -11,6 +11,9 @@
 .platform-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 12px 15px 4px; padding: 4px; border-radius: 8px; background: #f3f0ec; }
 .platform-switch button { height: 34px; border: 0; border-radius: 6px; color: #6f675f; background: transparent; }
 .platform-switch button[aria-pressed="true"] { color: #fff; background: var(--red); box-shadow: 0 2px 6px #8f2f2430; }
+.candidate-tabs { display: flex; gap: 6px; margin: 10px 15px 2px; }
+.candidate-tabs button { flex: 1; height: 30px; border: 1px solid var(--line); border-radius: 5px; background: #fff; font-size: 12px; }
+.candidate-tabs button[aria-pressed="true"] { border-color: var(--red); color: var(--red); background: var(--red-soft); }
 .copy-panel textarea { width: calc(100% - 30px); min-height: 150px; margin: 0 15px; padding: 10px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; outline: 0; font: 12px/1.65 inherit; }
 .copy-panel textarea:focus { border-color: var(--red); }
 .copy-panel textarea:disabled { color: #8d857e; background: #f8f6f3; }

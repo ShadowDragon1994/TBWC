@@ -66,11 +66,24 @@ describe('App interactions', () => {
   it('uses the local gateway when real AI mode is enabled', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'model', hasApiKey: true, updatedAt: null } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { title: 'AI 真实标题', sellingPoints: ['真实卖点'], body: 'AI 真实正文', source: 'ai' } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { title: 'AI 真实标题', sellingPoints: ['真实卖点'], body: 'AI 真实正文', source: 'ai', candidates: [{ title: 'AI 真实标题', sellingPoints: ['真实卖点'], body: 'AI 真实正文' }, { title: '候选二', sellingPoints: ['卖点二'], body: '正文二' }, { title: '候选三', sellingPoints: ['卖点三'], body: '正文三' }] } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: '生成内容' }))
-    expect(await screen.findByText('真实 AI 文案已生成')).toBeInTheDocument()
+    expect(await screen.findByText('真实 AI 已生成 3 个候选版本')).toBeInTheDocument()
     expect(screen.getByLabelText('生成标题')).toHaveValue('AI 真实标题')
+  })
+
+  it('offers three mock candidates and rewrites only the selected section', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { mode: 'mock', baseUrl: 'https://api.openai.com/v1', model: 'model', hasApiKey: false, updatedAt: null } }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '生成内容' }))
+    expect(await screen.findByRole('button', { name: '版本 3' })).toBeInTheDocument()
+    const bodyBefore = (screen.getByLabelText('正文脚本') as HTMLTextAreaElement).value
+    const titleBefore = (screen.getByLabelText('生成标题') as HTMLInputElement).value
+    await userEvent.click(screen.getByRole('button', { name: '只改写标题' }))
+    expect(await screen.findByText('标题已改写')).toBeInTheDocument()
+    expect(screen.getByLabelText('生成标题')).not.toHaveValue(titleBefore)
+    expect(screen.getByLabelText('正文脚本')).toHaveValue(bodyBefore)
   })
 })

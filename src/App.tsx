@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Archive, Box, Check, ChevronDown, CircleHelp, Download, FileImage, Home, Image, Lock, RefreshCw, Save, Settings, Sparkles, TriangleAlert } from 'lucide-react'
 import productImage from './assets/bookmark-gift.png'
-import { checkCompliance, generateMockContent, type ContentPlatform } from './features/creation/creation'
+import { analyzePlatformContent, checkCompliance, generateMockContent, type ContentPlatform } from './features/creation/creation'
 import { mockProduct } from './features/products/mockProducts'
 import { ProductLibrary } from './features/products/ProductLibrary'
 import type { ProductRecord } from './features/products/products.api'
@@ -47,7 +47,10 @@ export function App() {
   const [editingRecordId, setEditingRecordId] = useState<string | null>(initialDraft?.editingRecordId ?? null)
   const [guidance, setGuidance] = useState('')
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
+  const [candidates, setCandidates] = useState<Array<ReturnType<typeof generateMockContent>>>([])
   const findings = useMemo(() => checkCompliance(`${content.title} ${content.sellingPoints.join(' ')} ${content.body}`), [content])
+  const forbiddenTerms = useMemo(() => ('forbiddenTerms' in currentProduct ? currentProduct.forbiddenTerms ?? '' : '').split(/[，,、\n]/).map(term => term.trim()).filter(Boolean), [currentProduct])
+  const quality = useMemo(() => analyzePlatformContent(platform, content.title, content.body, forbiddenTerms), [platform, content, forbiddenTerms])
 
   useEffect(() => {
     const timer = window.setTimeout(() => localStorage.setItem(localDraftKey, JSON.stringify({ version: 1, platform, product: currentProduct, content, editingRecordId })), 500)
@@ -62,15 +65,34 @@ export function App() {
       const next = variant + 1
       setVariant(next)
       if (settings.mode === 'real') {
-        const { data } = await aiApi.generate({ platform, product: { name: currentProduct.name, category: currentProduct.category, price: currentProduct.price, material: currentProduct.material, audience: currentProduct.audience, scene: currentProduct.scene, sellingPoints: 'sellingPoints' in currentProduct ? currentProduct.sellingPoints : '', forbiddenTerms: 'forbiddenTerms' in currentProduct ? currentProduct.forbiddenTerms : '' }, guidance })
-        setContent({ ...data, platform, status: '待编辑' })
-        setNotice('真实 AI 文案已生成')
+        const { data } = await aiApi.generate({ platform, product: { name: currentProduct.name, category: currentProduct.category, price: currentProduct.price, material: currentProduct.material, audience: currentProduct.audience, scene: currentProduct.scene, sellingPoints: 'sellingPoints' in currentProduct ? currentProduct.sellingPoints : '', forbiddenTerms: 'forbiddenTerms' in currentProduct ? currentProduct.forbiddenTerms : '' }, guidance, count: 3, operation: 'generate' })
+        const options = data.candidates.map(candidate => ({ ...candidate, platform, status: '待编辑' as const }))
+        setCandidates(options); setContent(options[0])
+        setNotice('真实 AI 已生成 3 个候选版本')
       } else {
         await new Promise(resolve => window.setTimeout(resolve, 650))
-        setContent(generateMockContent(currentProduct.id, next, currentProduct.name, platform))
-        setNotice('已生成一组新的模拟文案')
+        const options = [0, 1, 2].map(offset => generateMockContent(currentProduct.id, next + offset, currentProduct.name, platform))
+        setCandidates(options); setContent(options[0]); setVariant(next + 2)
+        setNotice('已生成 3 个模拟候选版本')
       }
     } catch (error) { setNotice(error instanceof Error ? error.message : '内容生成失败') } finally { setGenerating(false) }
+  }
+
+  const rewrite = async (operation: 'rewrite_title' | 'rewrite_selling_points' | 'rewrite_body') => {
+    setGenerating(true)
+    try {
+      const settings = aiSettings ?? (await aiApi.settings()).data
+      setAiSettings(settings)
+      if (settings.mode === 'real') {
+        const { data } = await aiApi.generate({ platform, product: { name: currentProduct.name, category: currentProduct.category, price: currentProduct.price, material: currentProduct.material, audience: currentProduct.audience, scene: currentProduct.scene }, guidance, operation, count: 1, currentContent: content })
+        setContent({ ...content, ...(operation === 'rewrite_title' ? { title: data.title } : operation === 'rewrite_selling_points' ? { sellingPoints: data.sellingPoints } : { body: data.body }) })
+      } else {
+        const rewritten = generateMockContent(currentProduct.id, variant + 1, currentProduct.name, platform)
+        setVariant(value => value + 1)
+        setContent({ ...content, ...(operation === 'rewrite_title' ? { title: rewritten.title } : operation === 'rewrite_selling_points' ? { sellingPoints: rewritten.sellingPoints } : { body: rewritten.body }) })
+      }
+      setNotice(operation === 'rewrite_title' ? '标题已改写' : operation === 'rewrite_selling_points' ? '卖点已改写' : '正文已改写')
+    } catch (error) { setNotice(error instanceof Error ? error.message : '局部改写失败') } finally { setGenerating(false) }
   }
 
   const exportBundle = () => {
@@ -135,13 +157,14 @@ export function App() {
         <aside className="editor-panel">
           <section className="panel copy-panel"><div className="panel-title">文案内容 <button className="plain-action" onClick={() => setLocked(value => !value)}><Lock size={14}/>{locked ? '全部解锁' : '全部锁定'}</button></div>
             <div className="platform-switch" aria-label="内容平台">{(['小红书', '抖音'] as ContentPlatform[]).map(option => <button key={option} aria-pressed={platform === option} onClick={() => { setPlatform(option); setVariant(0); setContent(generateMockContent(currentProduct.id, 0, currentProduct.name, option)); setNotice(`已切换为${option}文案结构`) }}>{option}</button>)}</div>
-            <label>生成标题 <small>{content.title.length}/30</small></label><div className="editable"><input aria-label="生成标题" disabled={locked} value={content.title} onChange={event => setContent({...content, title:event.target.value})}/><Lock size={15}/></div>
+            {candidates.length > 1 && <div className="candidate-tabs" aria-label="候选版本">{candidates.map((candidate, index) => <button key={index} aria-pressed={candidate.title === content.title} onClick={() => setContent(candidate)}>版本 {index + 1}</button>)}</div>}
+            <label>生成标题 <small>{content.title.length}/30</small></label><div className="editable"><input aria-label="生成标题" disabled={locked} value={content.title} onChange={event => setContent({...content, title:event.target.value})}/><Lock size={15}/></div><button className="regen" onClick={() => void rewrite('rewrite_title')}><RefreshCw size={14}/>只改写标题</button>
             <button className="regen" onClick={() => void generate()}><RefreshCw size={14}/>重新生成</button>
-            <label>产品卖点 <small>3/3</small></label>{content.sellingPoints.map((point, index) => <div className="editable point" key={index}><i>{index + 1}</i><input aria-label={`产品卖点 ${index + 1}`} disabled={locked} value={point} onChange={event => { const points=[...content.sellingPoints]; points[index]=event.target.value; setContent({...content,sellingPoints:points})}}/><Lock size={15}/></div>)}
-            <label>{platform === '抖音' ? '口播脚本' : '正文笔记'} <small>{content.body.length}/10000</small></label><textarea aria-label="正文脚本" disabled={locked} value={content.body} onChange={event => setContent({...content, body:event.target.value})}/>
+            <label>产品卖点 <small>{content.sellingPoints.length}/5</small></label>{content.sellingPoints.map((point, index) => <div className="editable point" key={index}><i>{index + 1}</i><input aria-label={`产品卖点 ${index + 1}`} disabled={locked} value={point} onChange={event => { const points=[...content.sellingPoints]; points[index]=event.target.value; setContent({...content,sellingPoints:points})}}/><Lock size={15}/></div>)}<button className="regen" onClick={() => void rewrite('rewrite_selling_points')}><RefreshCw size={14}/>只改写卖点</button>
+            <label>{platform === '抖音' ? '口播脚本' : '正文笔记'} <small>{content.body.length}/10000</small></label><textarea aria-label="正文脚本" disabled={locked} value={content.body} onChange={event => setContent({...content, body:event.target.value})}/><button className="regen" onClick={() => void rewrite('rewrite_body')}><RefreshCw size={14}/>只改写正文</button>
             <label>补充要求 <small>{guidance.length}/1000</small></label><textarea className="guidance" aria-label="补充要求" disabled={locked} value={guidance} onChange={event => setGuidance(event.target.value)} placeholder="例如：语气自然、突出送老师场景"/>
           </section>
-          <section className="panel compliance"><div className="panel-title">合规检测 <button onClick={() => setNotice('合规检测已更新')}><RefreshCw size={14}/>重新检测</button></div>{findings.map((finding, index) => <div className={finding.level} key={index}>{finding.level === 'warning' ? <TriangleAlert/> : <Check/>}<span>{finding.message}</span>{finding.level === 'warning' && <button onClick={() => { setContent({...content,title:content.title.replaceAll('限量','限定'),sellingPoints:content.sellingPoints.map(point=>point.replaceAll('限量','限定'))}); setNotice('风险表达已替换为“限定”') }}>去修改</button>}</div>)}</section>
+          <section className="panel compliance"><div className="panel-title">内容质量 <span>{platform === '抖音' ? `约 ${quality.metrics.estimatedSeconds} 秒` : `${quality.metrics.topicCount} 个话题`}</span></div>{[...findings, ...quality.findings].map((finding, index) => <div className={finding.level} key={index}>{finding.level === 'warning' ? <TriangleAlert/> : <Check/>}<span>{finding.message}</span></div>)}</section>
         </aside>
       </section>
 
