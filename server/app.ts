@@ -12,7 +12,7 @@ import { backupSchema, productInputSchema } from './products/product.schema'
 import { createAssetRepository } from './products/asset.repository'
 import { createBackupArchive, restoreBackupArchive } from './backup/backup.service'
 import { createCreationRecordRepository } from './creation-records/creation-record.repository'
-import { creationRecordInputSchema } from './creation-records/creation-record.schema'
+import { creationRecordInputSchema, creationRecordQuerySchema } from './creation-records/creation-record.schema'
 import { createCreationRecordService, CreationRecordNotFoundError } from './creation-records/creation-record.service'
 import { createAiSettingsRepository } from './ai/ai.repository'
 import { aiGenerateInputSchema, aiSettingsInputSchema } from './ai/ai.schema'
@@ -39,7 +39,7 @@ export function createApp({ database, uploadDir, encryptionKey = randomBytes(32)
     restoreProducts: (products: Parameters<typeof productService.restore>[0]) => productService.restore(products),
     listAssets: () => assetRepository.listAll(),
     restoreAssets: (assets: Parameters<typeof assetRepository.replaceAll>[0]) => assetRepository.replaceAll(assets),
-    listCreationRecords: () => creationRecordRepository.list(),
+    listCreationRecords: () => creationRecordRepository.list({ q: '', productName: '', platform: '', source: '' }),
     restoreCreationRecords: (records: Parameters<typeof creationRecordRepository.replaceAll>[0]) => creationRecordRepository.replaceAll(records),
   }
 
@@ -75,7 +75,7 @@ export function createApp({ database, uploadDir, encryptionKey = randomBytes(32)
       response.json({ data: await restoreBackupArchive(request.file.buffer, backupDependencies) })
     } catch (error) { next(error) }
   })
-  app.get('/api/creation-records', (request, response) => response.json({ data: creationRecordService.list(String(request.query.q ?? '')) }))
+  app.get('/api/creation-records', (request, response) => response.json({ data: creationRecordService.list(creationRecordQuerySchema.parse(request.query)) }))
   app.post('/api/creation-records', (request, response) => response.status(201).json({ data: creationRecordService.create(creationRecordInputSchema.parse(request.body)) }))
   app.put('/api/creation-records/:id', (request, response) => response.json({ data: creationRecordService.update(String(request.params.id), creationRecordInputSchema.parse(request.body)) }))
   app.delete('/api/creation-records/:id', (request, response) => { creationRecordService.remove(String(request.params.id)); response.status(204).end() })

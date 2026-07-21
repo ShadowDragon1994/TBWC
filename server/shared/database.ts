@@ -53,6 +53,10 @@ function migrate(database: AppDatabase) {
       updated_at TEXT NOT NULL
     );
   `)
+  const creationColumns = new Set((database.prepare('PRAGMA table_info(creation_records)').all() as Array<{ name: string }>).map(column => column.name))
+  if (!creationColumns.has('source')) database.exec("ALTER TABLE creation_records ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
+  if (!creationColumns.has('version_number')) database.exec('ALTER TABLE creation_records ADD COLUMN version_number INTEGER NOT NULL DEFAULT 1')
+  database.exec('CREATE INDEX IF NOT EXISTS creation_records_history_idx ON creation_records(product_name, platform, version_number DESC)')
   database.exec('PRAGMA foreign_keys = ON;')
 }
 

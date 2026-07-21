@@ -5,9 +5,12 @@ export type CreationRecordDraft = {
   title: string
   sellingPoints: string[]
   body: string
+  source?: CreationRecordSource
 }
 
-export type CreationRecord = CreationRecordDraft & { id: string; createdAt: string; updatedAt: string }
+export type CreationRecordSource = 'generate' | 'rewrite_title' | 'rewrite_selling_points' | 'rewrite_body' | 'manual'
+export type CreationRecord = CreationRecordDraft & { source: CreationRecordSource; versionNumber: number; id: string; createdAt: string; updatedAt: string }
+export type CreationRecordFilters = { q?: string; productName?: string; platform?: string; source?: CreationRecordSource | '' }
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, options)
@@ -21,7 +24,12 @@ async function api<T>(path: string, options?: RequestInit): Promise<T> {
 const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
 export const creationRecordsApi = {
-  list: (query = '') => api<{ data: CreationRecord[] }>(`/api/creation-records?q=${encodeURIComponent(query)}`),
+  list(filters: string | CreationRecordFilters = '') {
+    const values = typeof filters === 'string' ? { q: filters } : filters
+    const params = new URLSearchParams()
+    Object.entries(values).forEach(([key, value]) => { if (value) params.set(key, value) })
+    return api<{ data: CreationRecord[] }>(`/api/creation-records?${params.toString()}`)
+  },
   create: (draft: CreationRecordDraft) => api<{ data: CreationRecord }>('/api/creation-records', json('POST', draft)),
   update: (id: string, draft: CreationRecordDraft) => api<{ data: CreationRecord }>(`/api/creation-records/${id}`, json('PUT', draft)),
   remove: (id: string) => api<void>(`/api/creation-records/${id}`, { method: 'DELETE' }),

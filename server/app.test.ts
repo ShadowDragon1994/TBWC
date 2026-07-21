@@ -106,6 +106,24 @@ describe('creation record API', () => {
     await request(app).get('/api/creation-records').expect(200).expect(response => expect(response.body.data).toEqual([]))
     database.close()
   })
+
+  it('assigns immutable version numbers and filters history by product, platform and source', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    const base = { productId: null, productName: '青瓷杯', platform: '小红书', sellingPoints: ['温润釉色'], body: '正文' }
+
+    const generated = await request(app).post('/api/creation-records').send({ ...base, title: '候选一', source: 'generate' }).expect(201)
+    const rewritten = await request(app).post('/api/creation-records').send({ ...base, title: '改写标题', source: 'rewrite_title' }).expect(201)
+    await request(app).post('/api/creation-records').send({ ...base, productName: '木梳', platform: '抖音', title: '其他记录', source: 'manual' }).expect(201)
+
+    expect(generated.body.data).toMatchObject({ versionNumber: 1, source: 'generate' })
+    expect(rewritten.body.data).toMatchObject({ versionNumber: 2, source: 'rewrite_title' })
+    await request(app).get('/api/creation-records?productName=青瓷杯&platform=小红书&source=rewrite_title').expect(200).expect(response => {
+      expect(response.body.data).toHaveLength(1)
+      expect(response.body.data[0]).toMatchObject({ title: '改写标题', versionNumber: 2 })
+    })
+    database.close()
+  })
 })
 
 describe('AI gateway API', () => {

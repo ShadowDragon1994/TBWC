@@ -6,7 +6,7 @@ import { mockProduct } from './features/products/mockProducts'
 import { ProductLibrary } from './features/products/ProductLibrary'
 import type { ProductRecord } from './features/products/products.api'
 import { CreationRecords } from './features/creation-records/CreationRecords'
-import { creationRecordsApi, type CreationRecord } from './features/creation-records/creation-records.api'
+import { creationRecordsApi, type CreationRecord, type CreationRecordSource } from './features/creation-records/creation-records.api'
 import { AiSettingsPage } from './features/ai/AiSettingsPage'
 import { aiApi, type AiSettings } from './features/ai/ai.api'
 
@@ -57,6 +57,20 @@ export function App() {
     return () => window.clearTimeout(timer)
   }, [platform, currentProduct, content, editingRecordId])
 
+  const saveSnapshot = (snapshot: typeof content, source: CreationRecordSource) => creationRecordsApi.create({
+    productId: currentProduct.id === mockProduct.id ? null : currentProduct.id,
+    productName: currentProduct.name,
+    platform,
+    title: snapshot.title,
+    sellingPoints: snapshot.sellingPoints,
+    body: snapshot.body,
+    source,
+  })
+  const saveSnapshots = async (snapshots: Array<{ snapshot: typeof content; source: CreationRecordSource }>) => {
+    const results = await Promise.allSettled(snapshots.map(item => saveSnapshot(item.snapshot, item.source)))
+    return results.every(result => result.status === 'fulfilled')
+  }
+
   const generate = async () => {
     setGenerating(true)
     try {
@@ -67,13 +81,13 @@ export function App() {
       if (settings.mode === 'real') {
         const { data } = await aiApi.generate({ platform, product: { name: currentProduct.name, category: currentProduct.category, price: currentProduct.price, material: currentProduct.material, audience: currentProduct.audience, scene: currentProduct.scene, sellingPoints: 'sellingPoints' in currentProduct ? currentProduct.sellingPoints : '', forbiddenTerms: 'forbiddenTerms' in currentProduct ? currentProduct.forbiddenTerms : '' }, guidance, count: 3, operation: 'generate' })
         const options = data.candidates.map(candidate => ({ ...candidate, platform, status: '待编辑' as const }))
-        setCandidates(options); setContent(options[0])
-        setNotice('真实 AI 已生成 3 个候选版本')
+        setCandidates(options); setContent(options[0]); const saved = await saveSnapshots(options.map(option => ({ snapshot: option, source: 'generate' })))
+        setNotice(saved ? '真实 AI 已生成 3 个候选版本，已自动保存' : '真实 AI 已生成 3 个候选版本；历史自动保存失败')
       } else {
         await new Promise(resolve => window.setTimeout(resolve, 650))
         const options = [0, 1, 2].map(offset => generateMockContent(currentProduct.id, next + offset, currentProduct.name, platform))
-        setCandidates(options); setContent(options[0]); setVariant(next + 2)
-        setNotice('已生成 3 个模拟候选版本')
+        setCandidates(options); setContent(options[0]); setVariant(next + 2); const saved = await saveSnapshots(options.map(option => ({ snapshot: option, source: 'generate' })))
+        setNotice(saved ? '已生成 3 个模拟候选版本，已自动保存' : '已生成 3 个模拟候选版本；历史自动保存失败')
       }
     } catch (error) { setNotice(error instanceof Error ? error.message : '内容生成失败') } finally { setGenerating(false) }
   }
@@ -85,11 +99,13 @@ export function App() {
       setAiSettings(settings)
       if (settings.mode === 'real') {
         const { data } = await aiApi.generate({ platform, product: { name: currentProduct.name, category: currentProduct.category, price: currentProduct.price, material: currentProduct.material, audience: currentProduct.audience, scene: currentProduct.scene }, guidance, operation, count: 1, currentContent: content })
-        setContent({ ...content, ...(operation === 'rewrite_title' ? { title: data.title } : operation === 'rewrite_selling_points' ? { sellingPoints: data.sellingPoints } : { body: data.body }) })
+        const updated = { ...content, ...(operation === 'rewrite_title' ? { title: data.title } : operation === 'rewrite_selling_points' ? { sellingPoints: data.sellingPoints } : { body: data.body }) }
+        setContent(updated); await saveSnapshots([{ snapshot: updated, source: operation }])
       } else {
         const rewritten = generateMockContent(currentProduct.id, variant + 1, currentProduct.name, platform)
         setVariant(value => value + 1)
-        setContent({ ...content, ...(operation === 'rewrite_title' ? { title: rewritten.title } : operation === 'rewrite_selling_points' ? { sellingPoints: rewritten.sellingPoints } : { body: rewritten.body }) })
+        const updated = { ...content, ...(operation === 'rewrite_title' ? { title: rewritten.title } : operation === 'rewrite_selling_points' ? { sellingPoints: rewritten.sellingPoints } : { body: rewritten.body }) }
+        setContent(updated); await saveSnapshots([{ snapshot: updated, source: operation }])
       }
       setNotice(operation === 'rewrite_title' ? '标题已改写' : operation === 'rewrite_selling_points' ? '卖点已改写' : '正文已改写')
     } catch (error) { setNotice(error instanceof Error ? error.message : '局部改写失败') } finally { setGenerating(false) }
@@ -117,10 +133,11 @@ export function App() {
         title: content.title,
         sellingPoints: content.sellingPoints,
         body: content.body,
+        source: 'manual' as const,
       }
-      const saved = editingRecordId ? await creationRecordsApi.update(editingRecordId, draft) : await creationRecordsApi.create(draft)
+      const saved = await creationRecordsApi.create(draft)
       setEditingRecordId(saved.data.id)
-      setNotice(editingRecordId ? '创作记录已更新' : '创作记录已保存到本机')
+      setNotice('已保存为新的历史版本')
     } catch (error) { setNotice(error instanceof Error ? error.message : '保存创作记录失败') } finally { setSaving(false) }
   }
 
@@ -133,7 +150,7 @@ export function App() {
 
     <main>
       <header className="topbar"><div/><button onClick={() => setNotice('可直接编辑文案；生成与导出目前使用模拟数据')}><CircleHelp size={17}/>使用帮助</button><span className="avatar">山</span></header>
-      {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name, platform)); setEditingRecordId(null); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : selectedNav === '创作记录' ? <CreationRecords onContinue={(record: CreationRecord) => { const recordPlatform: ContentPlatform = record.platform === '抖音' ? '抖音' : '小红书'; setCurrentProduct({ ...mockProduct, id: record.productId ?? mockProduct.id, name: record.productName }); setPlatform(recordPlatform); setContent({ platform: recordPlatform, title: record.title, sellingPoints: record.sellingPoints, body: record.body, status: '待编辑' }); setEditingRecordId(record.id); setSelectedNav('今日工作台'); setNotice('已载入历史创作，可继续修改') }}/> : selectedNav === '设置' ? <AiSettingsPage onSaved={settings => setAiSettings(settings)}/> : <>
+      {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name, platform)); setEditingRecordId(null); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : selectedNav === '创作记录' ? <CreationRecords onContinue={(record: CreationRecord) => { const recordPlatform: ContentPlatform = record.platform === '抖音' ? '抖音' : '小红书'; setCurrentProduct({ ...mockProduct, id: record.productId ?? mockProduct.id, name: record.productName }); setPlatform(recordPlatform); setContent({ platform: recordPlatform, title: record.title, sellingPoints: record.sellingPoints, body: record.body, status: '待编辑' }); setEditingRecordId(null); setSelectedNav('今日工作台'); setNotice(`已恢复历史版本 V${record.versionNumber ?? 1}，保存时会创建新版本`) }}/> : selectedNav === '设置' ? <AiSettingsPage onSaved={settings => setAiSettings(settings)}/> : <>
       <section className="page-head">
         <div><h1>{currentProduct.name}创作任务</h1><div className="steps"><span className="done"><Check/>选择商品</span><i/><span className="current">2</span><b>生成内容</b><i/><span>3</span><b>审核调整</b><i/><span>4</span><b>导出完成</b></div></div>
         <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '内容生成中' : exported ? '已导出' : '待编辑'}</em></div><button className="primary" onClick={() => void generate()} disabled={generating}><Sparkles size={18}/>{generating ? '正在生成…' : '生成内容'}</button><button className="secondary" onClick={() => void saveCreation()} disabled={saving}><Save size={18}/>{saving ? '保存中…' : '保存创作'}</button><button className="secondary" onClick={exportBundle}><Download size={18}/>导出素材包</button></div>
