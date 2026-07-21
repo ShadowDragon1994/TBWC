@@ -21,6 +21,9 @@ export const aiGenerateInputSchema = z.object({
     sellingPoints: z.string().max(1000).optional(), forbiddenTerms: z.string().max(500).optional(),
   }),
   guidance: z.string().max(1000).default(''),
+  count: z.number().int().min(1).max(3).default(1),
+  operation: z.enum(['generate', 'rewrite_title', 'rewrite_selling_points', 'rewrite_body']).default('generate'),
+  currentContent: z.object({ title: z.string().max(200), sellingPoints: z.array(z.string().max(300)).max(5), body: z.string().max(10000) }).optional(),
 })
 
 export const generatedContentSchema = z.object({
@@ -28,6 +31,7 @@ export const generatedContentSchema = z.object({
   sellingPoints: z.array(z.string().trim().min(1).max(300)).min(1).max(5),
   body: z.string().trim().min(1).max(10000),
 })
+export const generatedCandidatesSchema = z.object({ candidates: z.array(generatedContentSchema).min(1).max(3) })
 
 export type AiSettingsInput = z.infer<typeof aiSettingsInputSchema>
 export type AiGenerateInput = z.infer<typeof aiGenerateInputSchema>

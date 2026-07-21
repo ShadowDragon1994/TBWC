@@ -120,12 +120,17 @@ describe('AI gateway API', () => {
   })
 
   it('generates validated platform copy through the configured compatible API', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ title: '真实生成标题', sellingPoints: ['卖点一', '卖点二'], body: '真实生成正文' }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ candidates: [
+      { title: '真实生成标题一', sellingPoints: ['卖点一', '卖点二'], body: '真实生成正文一' },
+      { title: '真实生成标题二', sellingPoints: ['卖点三'], body: '真实生成正文二' },
+      { title: '真实生成标题三', sellingPoints: ['卖点四'], body: '真实生成正文三' },
+    ] }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const database = createTestDatabase()
     const app = createApp({ database, uploadDir: 'tmp/test-uploads', encryptionKey: Buffer.alloc(32, 9), fetchImpl })
     await request(app).put('/api/ai/settings').send({ mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'example-model', apiKey: 'sk-test' }).expect(200)
-    const generated = await request(app).post('/api/ai/generate').send({ platform: '小红书', product: { name: '青瓷杯', category: '茶具', price: 89, material: '陶瓷', audience: '喜欢喝茶的人', scene: '书桌', sellingPoints: '釉色温润', forbiddenTerms: '' }, guidance: '语气自然' }).expect(200)
-    expect(generated.body.data).toMatchObject({ title: '真实生成标题', body: '真实生成正文', source: 'ai' })
+    const generated = await request(app).post('/api/ai/generate').send({ platform: '小红书', product: { name: '青瓷杯', category: '茶具', price: 89, material: '陶瓷', audience: '喜欢喝茶的人', scene: '书桌', sellingPoints: '釉色温润', forbiddenTerms: '' }, guidance: '语气自然', count: 3, operation: 'generate' }).expect(200)
+    expect(generated.body.data).toMatchObject({ title: '真实生成标题一', body: '真实生成正文一', source: 'ai' })
+    expect(generated.body.data.candidates).toHaveLength(3)
     expect(fetchImpl).toHaveBeenCalledWith('https://api.example.com/v1/chat/completions', expect.objectContaining({ method: 'POST' }))
     database.close()
   })
