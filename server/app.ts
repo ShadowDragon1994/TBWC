@@ -12,7 +12,7 @@ import { backupSchema, productInputSchema } from './products/product.schema'
 import { createAssetRepository } from './products/asset.repository'
 import { createBackupArchive, restoreBackupArchive } from './backup/backup.service'
 import { createCreationRecordRepository } from './creation-records/creation-record.repository'
-import { creationRecordInputSchema, creationRecordQuerySchema } from './creation-records/creation-record.schema'
+import { creationRecordInputSchema, creationRecordQuerySchema, publicationInputSchema } from './creation-records/creation-record.schema'
 import { createCreationRecordService, CreationRecordNotFoundError } from './creation-records/creation-record.service'
 import { createAiSettingsRepository } from './ai/ai.repository'
 import { aiGenerateInputSchema, aiSettingsInputSchema } from './ai/ai.schema'
@@ -79,6 +79,7 @@ export function createApp({ database, uploadDir, encryptionKey = randomBytes(32)
   app.post('/api/creation-records', (request, response) => response.status(201).json({ data: creationRecordService.create(creationRecordInputSchema.parse(request.body)) }))
   app.put('/api/creation-records/:id', (request, response) => response.json({ data: creationRecordService.update(String(request.params.id), creationRecordInputSchema.parse(request.body)) }))
   app.delete('/api/creation-records/:id', (request, response) => { creationRecordService.remove(String(request.params.id)); response.status(204).end() })
+  app.patch('/api/creation-records/:id/publication', (request, response) => response.json({ data: creationRecordService.updatePublication(String(request.params.id), publicationInputSchema.parse(request.body)) }))
   app.get('/api/ai/settings', (_request, response) => response.json({ data: aiService.getSettings() }))
   app.put('/api/ai/settings', (request, response) => response.json({ data: aiService.saveSettings(aiSettingsInputSchema.parse(request.body)) }))
   app.post('/api/ai/test', async (_request, response, next) => {

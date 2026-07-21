@@ -37,7 +37,7 @@ export function CreationRecords({ onContinue }: { onContinue: (record: CreationR
     <form className="records-search" onSubmit={event => { event.preventDefault(); void load() }}><label><Search/><input aria-label="搜索创作记录" value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索标题或关键词"/></label><select aria-label="筛选商品" value={productName} onChange={event => setProductName(event.target.value)}><option value="">全部商品</option>{productNames.map(name => <option key={name}>{name}</option>)}</select><select aria-label="筛选平台" value={platform} onChange={event => setPlatform(event.target.value)}><option value="">全部平台</option><option>小红书</option><option>抖音</option></select><select aria-label="筛选来源" value={source} onChange={event => setSource(event.target.value as CreationRecordSource | '')}><option value="">全部来源</option>{Object.entries(sourceLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><button type="submit">筛选</button></form>
     {message && <div className="records-message" role="status">{message}<button onClick={() => setMessage('')}>×</button></div>}
     {records.length === 0 ? <div className="records-empty"><FileText/><h2>还没有创作记录</h2><p>回到今日工作台生成内容，然后点击“保存创作”。</p></div> : <div className="records-grid">{records.map(record => <article key={record.id}>
-      <div className="record-meta"><div><span>{record.platform}</span><b>V{record.versionNumber ?? 1}</b><em>{sourceLabels[record.source ?? 'manual']}</em></div><time>{new Date(record.createdAt).toLocaleString('zh-CN')}</time></div>
+      <div className="record-meta"><div><span>{record.platform}</span><b>V{record.versionNumber ?? 1}</b><em>{sourceLabels[record.source ?? 'manual']}</em><i className={`publish-state ${record.publishStatus ?? 'draft'}`}>{publishStatusLabels[record.publishStatus ?? 'draft']}</i></div><time>{new Date(record.createdAt).toLocaleString('zh-CN')}</time></div>
       <h2>{record.title}</h2><p className="record-product">关联商品：{record.productName}</p>
       <ol>{record.sellingPoints.map((point, index) => <li key={index}>{point}</li>)}</ol>
       {record.body && <p className="record-body">{record.body}</p>}
@@ -47,3 +47,4 @@ export function CreationRecords({ onContinue }: { onContinue: (record: CreationR
 }
 
 const sourceLabels: Record<CreationRecordSource, string> = { generate: '生成候选', rewrite_title: '标题改写', rewrite_selling_points: '卖点改写', rewrite_body: '正文改写', manual: '手动保存' }
+const publishStatusLabels = { draft: '草稿', ready: '可发布', published: '已发布' } as const

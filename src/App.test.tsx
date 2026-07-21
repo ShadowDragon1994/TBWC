@@ -53,6 +53,16 @@ describe('App interactions', () => {
     expect((screen.getByLabelText('正文脚本') as HTMLTextAreaElement).value).toContain('【开场】')
   })
 
+  it('previews a platform publish package and blocks readiness while warnings remain', async () => {
+    render(<App />)
+    expect(screen.getByText('笔记发布包')).toBeInTheDocument()
+    await userEvent.click(screen.getByText('预览完整发布包'))
+    expect(screen.getByText(/## 话题标签/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存为可发布' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: '抖音' }))
+    expect(screen.getByText(/4 段分镜/)).toBeInTheDocument()
+  })
+
   it('continues editing a saved Douyin record in the workbench', async () => {
     const record = { id: 'r1', productId: null, productName: '青瓷杯', platform: '抖音', title: '历史标题', sellingPoints: ['历史卖点'], body: '历史口播正文', createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z' }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [record] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))

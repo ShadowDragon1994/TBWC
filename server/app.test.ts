@@ -124,6 +124,18 @@ describe('creation record API', () => {
     })
     database.close()
   })
+
+  it('records a safe publication status and HTTPS work URL', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    const created = await request(app).post('/api/creation-records').send({ productId: null, productName: '青瓷杯', platform: '小红书', title: '标题', sellingPoints: [], body: '正文' }).expect(201)
+    await request(app).patch(`/api/creation-records/${created.body.data.id}/publication`).send({ publishStatus: 'published', publishedUrl: 'https://www.xiaohongshu.com/explore/example' }).expect(200).expect(response => {
+      expect(response.body.data).toMatchObject({ publishStatus: 'published', publishedUrl: 'https://www.xiaohongshu.com/explore/example' })
+    })
+    await request(app).patch(`/api/creation-records/${created.body.data.id}/publication`).send({ publishStatus: 'published', publishedUrl: 'http://127.0.0.1/private' }).expect(422)
+    await request(app).patch(`/api/creation-records/${created.body.data.id}/publication`).send({ publishStatus: 'published', publishedUrl: '' }).expect(422)
+    database.close()
+  })
 })
 
 describe('AI gateway API', () => {

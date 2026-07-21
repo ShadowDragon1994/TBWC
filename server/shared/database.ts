@@ -56,6 +56,8 @@ function migrate(database: AppDatabase) {
   const creationColumns = new Set((database.prepare('PRAGMA table_info(creation_records)').all() as Array<{ name: string }>).map(column => column.name))
   if (!creationColumns.has('source')) database.exec("ALTER TABLE creation_records ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
   if (!creationColumns.has('version_number')) database.exec('ALTER TABLE creation_records ADD COLUMN version_number INTEGER NOT NULL DEFAULT 1')
+  if (!creationColumns.has('publish_status')) database.exec("ALTER TABLE creation_records ADD COLUMN publish_status TEXT NOT NULL DEFAULT 'draft'")
+  if (!creationColumns.has('published_url')) database.exec("ALTER TABLE creation_records ADD COLUMN published_url TEXT NOT NULL DEFAULT ''")
   database.exec('CREATE INDEX IF NOT EXISTS creation_records_history_idx ON creation_records(product_name, platform, version_number DESC)')
   database.exec('PRAGMA foreign_keys = ON;')
 }

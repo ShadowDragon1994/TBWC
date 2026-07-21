@@ -6,9 +6,10 @@ import { mockProduct } from './features/products/mockProducts'
 import { ProductLibrary } from './features/products/ProductLibrary'
 import type { ProductRecord } from './features/products/products.api'
 import { CreationRecords } from './features/creation-records/CreationRecords'
-import { creationRecordsApi, type CreationRecord, type CreationRecordSource } from './features/creation-records/creation-records.api'
+import { creationRecordsApi, type CreationRecord, type CreationRecordSource, type PublishStatus } from './features/creation-records/creation-records.api'
 import { AiSettingsPage } from './features/ai/AiSettingsPage'
 import { aiApi, type AiSettings } from './features/ai/ai.api'
+import { PublishPackagePanel } from './features/publishing/PublishPackagePanel'
 
 const nav = [[Home, '今日工作台'], [Box, '商品库'], [Archive, '创作记录'], [Image, '模板与素材'], [Settings, '设置']] as const
 const exportOptions = ['主图 800×800', '详情页长图 750px', '竖版海报 3:4']
@@ -51,6 +52,7 @@ export function App() {
   const findings = useMemo(() => checkCompliance(`${content.title} ${content.sellingPoints.join(' ')} ${content.body}`), [content])
   const forbiddenTerms = useMemo(() => ('forbiddenTerms' in currentProduct ? currentProduct.forbiddenTerms ?? '' : '').split(/[，,、\n]/).map(term => term.trim()).filter(Boolean), [currentProduct])
   const quality = useMemo(() => analyzePlatformContent(platform, content.title, content.body, forbiddenTerms), [platform, content, forbiddenTerms])
+  const allFindings = useMemo(() => [...findings, ...quality.findings], [findings, quality.findings])
 
   useEffect(() => {
     const timer = window.setTimeout(() => localStorage.setItem(localDraftKey, JSON.stringify({ version: 1, platform, product: currentProduct, content, editingRecordId })), 500)
@@ -141,6 +143,15 @@ export function App() {
     } catch (error) { setNotice(error instanceof Error ? error.message : '保存创作记录失败') } finally { setSaving(false) }
   }
 
+  const savePublication = async (publishStatus: PublishStatus, publishedUrl = '') => {
+    try {
+      const saved = await creationRecordsApi.create({ productId: currentProduct.id === mockProduct.id ? null : currentProduct.id, productName: currentProduct.name, platform, title: content.title, sellingPoints: content.sellingPoints, body: content.body, source: 'manual' })
+      await creationRecordsApi.updatePublication(saved.data.id, publishStatus, publishedUrl)
+      setEditingRecordId(saved.data.id)
+      setNotice(publishStatus === 'published' ? '已记录发布作品和链接' : '已保存为可发布版本')
+    } catch (error) { setNotice(error instanceof Error ? error.message : '发布状态保存失败'); throw error }
+  }
+
   return <div className="app-shell">
     <aside className="sidebar">
       <div className="brand"><span className="seal">造</span><strong>造物台</strong></div>
@@ -181,7 +192,8 @@ export function App() {
             <label>{platform === '抖音' ? '口播脚本' : '正文笔记'} <small>{content.body.length}/10000</small></label><textarea aria-label="正文脚本" disabled={locked} value={content.body} onChange={event => setContent({...content, body:event.target.value})}/><button className="regen" onClick={() => void rewrite('rewrite_body')}><RefreshCw size={14}/>只改写正文</button>
             <label>补充要求 <small>{guidance.length}/1000</small></label><textarea className="guidance" aria-label="补充要求" disabled={locked} value={guidance} onChange={event => setGuidance(event.target.value)} placeholder="例如：语气自然、突出送老师场景"/>
           </section>
-          <section className="panel compliance"><div className="panel-title">内容质量 <span>{platform === '抖音' ? `约 ${quality.metrics.estimatedSeconds} 秒` : `${quality.metrics.topicCount} 个话题`}</span></div>{[...findings, ...quality.findings].map((finding, index) => <div className={finding.level} key={index}>{finding.level === 'warning' ? <TriangleAlert/> : <Check/>}<span>{finding.message}</span></div>)}</section>
+          <section className="panel compliance"><div className="panel-title">内容质量 <span>{platform === '抖音' ? `约 ${quality.metrics.estimatedSeconds} 秒` : `${quality.metrics.topicCount} 个话题`}</span></div>{allFindings.map((finding, index) => <div className={finding.level} key={index}>{finding.level === 'warning' ? <TriangleAlert/> : <Check/>}<span>{finding.message}</span></div>)}</section>
+          <PublishPackagePanel platform={platform} title={content.title} sellingPoints={content.sellingPoints} body={content.body} findings={allFindings} onStatus={savePublication} onNotice={setNotice}/>
         </aside>
       </section>
 

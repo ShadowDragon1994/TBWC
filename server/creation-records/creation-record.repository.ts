@@ -5,6 +5,7 @@ type CreationRecordRow = {
   id: string; productId: string | null; productName: string; platform: string; title: string
   sellingPoints: string; body: string; createdAt: string; updatedAt: string
   source: CreationRecord['source']; versionNumber: number
+  publishStatus: CreationRecord['publishStatus']; publishedUrl: string
 }
 
 const fromRow = (row: CreationRecordRow): CreationRecord => ({
@@ -14,16 +15,17 @@ const fromRow = (row: CreationRecordRow): CreationRecord => ({
 
 export function createCreationRecordRepository(database: AppDatabase) {
   const select = `SELECT id, product_id AS productId, product_name AS productName, platform, title,
-    selling_points AS sellingPoints, body, source, version_number AS versionNumber,
+    selling_points AS sellingPoints, body, source, version_number AS versionNumber, publish_status AS publishStatus, published_url AS publishedUrl,
     created_at AS createdAt, updated_at AS updatedAt FROM creation_records`
   const insert = database.prepare(`INSERT INTO creation_records
-    (id,product_id,product_name,platform,title,selling_points,body,source,version_number,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+    (id,product_id,product_name,platform,title,selling_points,body,source,version_number,publish_status,published_url,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`)
   const update = database.prepare(`UPDATE creation_records SET product_id=?,product_name=?,platform=?,title=?,selling_points=?,body=?,updated_at=? WHERE id=?`)
   const find = database.prepare(`${select} WHERE id=?`)
   const remove = database.prepare('DELETE FROM creation_records WHERE id=?')
+  const updatePublication = database.prepare('UPDATE creation_records SET publish_status=?,published_url=?,updated_at=? WHERE id=?')
   return {
     create(record: CreationRecord) {
-      insert.run(record.id, record.productId, record.productName, record.platform, record.title, JSON.stringify(record.sellingPoints), record.body, record.source, record.versionNumber, record.createdAt, record.updatedAt)
+      insert.run(record.id, record.productId, record.productName, record.platform, record.title, JSON.stringify(record.sellingPoints), record.body, record.source, record.versionNumber, record.publishStatus, record.publishedUrl, record.createdAt, record.updatedAt)
       return record
     },
     list(query: CreationRecordQuery = { q: '', productName: '', platform: '', source: '' }) {
@@ -42,6 +44,9 @@ export function createCreationRecordRepository(database: AppDatabase) {
       return record
     },
     remove: (id: string) => remove.run(id).changes > 0,
+    updatePublication(id: string, publishStatus: CreationRecord['publishStatus'], publishedUrl: string, updatedAt: string) {
+      return updatePublication.run(publishStatus, publishedUrl, updatedAt, id).changes > 0
+    },
     replaceAll(records: CreationRecord[]) {
       database.exec('BEGIN')
       try {

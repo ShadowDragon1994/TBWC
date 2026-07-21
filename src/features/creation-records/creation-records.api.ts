@@ -9,7 +9,8 @@ export type CreationRecordDraft = {
 }
 
 export type CreationRecordSource = 'generate' | 'rewrite_title' | 'rewrite_selling_points' | 'rewrite_body' | 'manual'
-export type CreationRecord = CreationRecordDraft & { source: CreationRecordSource; versionNumber: number; id: string; createdAt: string; updatedAt: string }
+export type PublishStatus = 'draft' | 'ready' | 'published'
+export type CreationRecord = CreationRecordDraft & { source: CreationRecordSource; versionNumber: number; publishStatus: PublishStatus; publishedUrl: string; id: string; createdAt: string; updatedAt: string }
 export type CreationRecordFilters = { q?: string; productName?: string; platform?: string; source?: CreationRecordSource | '' }
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
@@ -32,5 +33,6 @@ export const creationRecordsApi = {
   },
   create: (draft: CreationRecordDraft) => api<{ data: CreationRecord }>('/api/creation-records', json('POST', draft)),
   update: (id: string, draft: CreationRecordDraft) => api<{ data: CreationRecord }>(`/api/creation-records/${id}`, json('PUT', draft)),
+  updatePublication: (id: string, publishStatus: PublishStatus, publishedUrl = '') => api<{ data: CreationRecord }>(`/api/creation-records/${id}/publication`, json('PATCH', { publishStatus, publishedUrl })),
   remove: (id: string) => api<void>(`/api/creation-records/${id}`, { method: 'DELETE' }),
 }
