@@ -75,6 +75,15 @@ describe('App interactions', () => {
     expect(screen.getByText('平台表现对比')).toBeInTheDocument()
   })
 
+  it('opens evidence-based strategy recommendations', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '策略建议' }))
+    expect(await screen.findByRole('heading', { name: '内容策略建议' })).toBeInTheDocument()
+    expect(screen.getAllByText('数据依据')).toHaveLength(3)
+    expect(screen.getByText('下周内容清单')).toBeInTheDocument()
+  })
+
   it('filters version history by product, platform and source', async () => {
     const record = { id: 'r2', productId: null, productName: '青瓷杯', platform: '小红书', title: '版本标题', sellingPoints: ['卖点'], body: '正文', source: 'generate', versionNumber: 3, createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z' }
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ data: [record] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
