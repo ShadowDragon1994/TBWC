@@ -51,6 +51,21 @@ describe('App interactions', () => {
     expect(screen.getByRole('heading', { name: '创作记录' })).toBeInTheDocument()
   })
 
+  it('opens the publishing board and advances a task for review', async () => {
+    const task = { id: '11111111-1111-4111-8111-111111111111', productId: null, creationRecordId: null, productName: '青瓷杯', platform: '小红书', title: '七夕青瓷笔记', plannedAt: '2026-07-23T02:00:00.000Z', notes: '', status: 'editing', publishedUrl: '', actualPublishedAt: null, createdAt: '', updatedAt: '' }
+    const fetchMock = vi.fn().mockImplementation((input: string, options?: RequestInit) => {
+      if (input.startsWith('/api/publishing-tasks') && options?.method === 'PUT') return Promise.resolve(new Response(JSON.stringify({ data: { ...task, status: 'review' } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify({ data: input.startsWith('/api/publishing-tasks') ? [task] : [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '发布任务' }))
+    expect(await screen.findByRole('heading', { name: '发布任务' })).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: '提交审核' }))
+    expect(await screen.findByRole('button', { name: '标记可发布' })).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(`/api/publishing-tasks/${task.id}`, expect.objectContaining({ method: 'PUT' }))
+  })
+
   it('filters version history by product, platform and source', async () => {
     const record = { id: 'r2', productId: null, productName: '青瓷杯', platform: '小红书', title: '版本标题', sellingPoints: ['卖点'], body: '正文', source: 'generate', versionNumber: 3, createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z' }
     const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ data: [record] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))

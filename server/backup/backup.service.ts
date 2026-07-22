@@ -6,6 +6,7 @@ import type { ProductAsset } from '../products/asset.repository'
 import type { Product } from '../products/product.types'
 import { backupSchema } from '../products/product.schema'
 import { creationRecordSchema, type CreationRecord } from '../creation-records/creation-record.schema'
+import { publishingTaskSchema, type PublishingTask } from '../publishing-tasks/publishing-task.schema'
 
 const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'] as const
 const assetSchema = z.object({
@@ -18,6 +19,7 @@ const archiveManifestSchema = z.object({
   products: backupSchema.shape.products,
   assets: z.array(assetSchema).max(10000),
   creationRecords: z.array(creationRecordSchema).max(20000).default([]),
+  publishingTasks: z.array(publishingTaskSchema).max(20000).default([]),
 })
 
 type BackupDependencies = {
@@ -28,6 +30,8 @@ type BackupDependencies = {
   restoreAssets: (assets: ProductAsset[]) => void
   listCreationRecords: () => CreationRecord[]
   restoreCreationRecords: (records: CreationRecord[]) => void
+  listPublishingTasks: () => PublishingTask[]
+  restorePublishingTasks: (tasks: PublishingTask[]) => void
 }
 
 export async function createBackupArchive(dependencies: BackupDependencies) {
@@ -35,7 +39,8 @@ export async function createBackupArchive(dependencies: BackupDependencies) {
   const products = dependencies.listProducts()
   const assets = dependencies.listAssets()
   const creationRecords = dependencies.listCreationRecords()
-  zip.file('manifest.json', JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), products, assets, creationRecords }, null, 2))
+  const publishingTasks = dependencies.listPublishingTasks()
+  zip.file('manifest.json', JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), products, assets, creationRecords, publishingTasks }, null, 2))
   for (const asset of assets) {
     if (basename(asset.storedName) !== asset.storedName) throw new Error('备份中存在无效图片文件名')
     zip.file(`uploads/${asset.storedName}`, await readFile(join(dependencies.uploadDir, asset.storedName)))
@@ -62,5 +67,6 @@ export async function restoreBackupArchive(buffer: Buffer, dependencies: BackupD
   dependencies.restoreProducts(manifest.products)
   dependencies.restoreAssets(manifest.assets)
   dependencies.restoreCreationRecords(manifest.creationRecords)
-  return { products: manifest.products.length, assets: manifest.assets.length, creationRecords: manifest.creationRecords.length }
+  dependencies.restorePublishingTasks(manifest.publishingTasks)
+  return { products: manifest.products.length, assets: manifest.assets.length, creationRecords: manifest.creationRecords.length, publishingTasks: manifest.publishingTasks.length }
 }

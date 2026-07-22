@@ -52,6 +52,21 @@ function migrate(database: AppDatabase) {
       encrypted_api_key TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS publishing_tasks (
+      id TEXT PRIMARY KEY,
+      product_id TEXT REFERENCES products(id) ON DELETE SET NULL,
+      creation_record_id TEXT REFERENCES creation_records(id) ON DELETE SET NULL,
+      product_name TEXT NOT NULL,
+      platform TEXT NOT NULL CHECK(platform IN ('小红书','抖音')),
+      title TEXT NOT NULL,
+      planned_at TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL CHECK(status IN ('editing','review','ready','published')),
+      published_url TEXT NOT NULL DEFAULT '',
+      actual_published_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `)
   const creationColumns = new Set((database.prepare('PRAGMA table_info(creation_records)').all() as Array<{ name: string }>).map(column => column.name))
   if (!creationColumns.has('source')) database.exec("ALTER TABLE creation_records ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
@@ -59,6 +74,7 @@ function migrate(database: AppDatabase) {
   if (!creationColumns.has('publish_status')) database.exec("ALTER TABLE creation_records ADD COLUMN publish_status TEXT NOT NULL DEFAULT 'draft'")
   if (!creationColumns.has('published_url')) database.exec("ALTER TABLE creation_records ADD COLUMN published_url TEXT NOT NULL DEFAULT ''")
   database.exec('CREATE INDEX IF NOT EXISTS creation_records_history_idx ON creation_records(product_name, platform, version_number DESC)')
+  database.exec('CREATE INDEX IF NOT EXISTS publishing_tasks_board_idx ON publishing_tasks(status, planned_at)')
   database.exec('PRAGMA foreign_keys = ON;')
 }
 

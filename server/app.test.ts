@@ -6,6 +6,57 @@ import request from 'supertest'
 import { createApp } from './app'
 import { createTestDatabase } from './shared/database'
 
+describe('publishing task API', () => {
+  it('creates, filters, publishes and deletes a publishing task', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    const created = await request(app).post('/api/publishing-tasks').send({
+      productId: null,
+      creationRecordId: null,
+      productName: '青瓷杯',
+      platform: '小红书',
+      title: '雨后青瓷发布任务',
+      plannedAt: '2026-07-23T02:00:00.000Z',
+      notes: '首图使用留白版',
+      status: 'editing',
+      publishedUrl: '',
+    }).expect(201)
+
+    await request(app).get('/api/publishing-tasks?platform=小红书&productName=青瓷').expect(200).expect(response => {
+      expect(response.body.data).toHaveLength(1)
+      expect(response.body.data[0]).toMatchObject({ id: created.body.data.id, status: 'editing' })
+    })
+
+    const published = await request(app).put(`/api/publishing-tasks/${created.body.data.id}`).send({
+      ...created.body.data,
+      status: 'published',
+      publishedUrl: 'https://www.xiaohongshu.com/explore/example',
+    }).expect(200)
+    expect(published.body.data.actualPublishedAt).toEqual(expect.any(String))
+
+    await request(app).delete(`/api/publishing-tasks/${created.body.data.id}`).expect(204)
+    await request(app).get('/api/publishing-tasks').expect(200).expect(response => expect(response.body.data).toEqual([]))
+    database.close()
+  })
+
+  it('requires an HTTPS work URL when a task is published', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    await request(app).post('/api/publishing-tasks').send({
+      productId: null,
+      creationRecordId: null,
+      productName: '木梳',
+      platform: '抖音',
+      title: '木梳短视频',
+      plannedAt: '2026-07-23T02:00:00.000Z',
+      notes: '',
+      status: 'published',
+      publishedUrl: 'http://example.com/work',
+    }).expect(422)
+    database.close()
+  })
+})
+
 describe('product API', () => {
   it('creates, lists, updates and deletes a product', async () => {
     const database = createTestDatabase()

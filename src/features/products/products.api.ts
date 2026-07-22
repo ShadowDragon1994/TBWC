@@ -33,6 +33,6 @@ export const productsApi = {
   restoreArchive: (file: File) => {
     const data = new FormData()
     data.append('backup', file)
-    return api<{ data: { products: number; assets: number; creationRecords: number } }>('/api/backup/archive', { method: 'POST', body: data })
+    return api<{ data: { products: number; assets: number; creationRecords: number; publishingTasks: number } }>('/api/backup/archive', { method: 'POST', body: data })
   },
 }
