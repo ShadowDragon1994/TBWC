@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { coverSpecs, readBrandPreset, safeCoverFilename } from './cover-studio'
+import { coverLayoutsKey, coverSpecs, normalizeCoverLayout, readBrandPreset, safeCoverFilename, saveCoverLayout } from './cover-studio'
 
 describe('cover studio rules', () => {
   it('uses platform-native portrait cover sizes', () => {
@@ -19,5 +19,16 @@ describe('cover studio rules', () => {
   it('rejects invalid persisted colors', () => {
     localStorage.setItem('zaowutai.brand-preset', JSON.stringify({ brandName: '测试', primaryColor: 'red;bad', accentColor: '#fff', topics: '' }))
     expect(readBrandPreset()).toMatchObject({ primaryColor: '#8f2f24', accentColor: '#d8b56a' })
+  })
+
+  it('clamps persisted cover layout values', () => {
+    expect(normalizeCoverLayout({ scale: 300, x: -150, y: 42 })).toEqual({ scale: 180, x: -100, y: 42 })
+    expect(normalizeCoverLayout(null)).toEqual({ scale: 100, x: 0, y: 0 })
+  })
+
+  it('replaces malformed layout storage when saving', () => {
+    localStorage.setItem(coverLayoutsKey, 'null')
+    expect(() => saveCoverLayout('抖音', 1, { scale: 120, x: 10, y: -5 })).not.toThrow()
+    expect(localStorage.getItem(coverLayoutsKey)).toContain('抖音-1')
   })
 })

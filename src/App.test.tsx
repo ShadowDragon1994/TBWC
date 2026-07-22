@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
@@ -13,6 +13,8 @@ describe('App interactions', () => {
   })
 
   it('opens the cover template studio and saves a local brand preset', async () => {
+    const product = { id: 'p1', name: '真实商品', category: '文创', price: 39, assets: [{ id: 'a1', filename: 'real.png', storedName: 'asset.png' }], createdAt: '', updatedAt: '' }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [product] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: '模板与素材' }))
     expect(screen.getByRole('heading', { name: '模板与素材' })).toBeInTheDocument()
@@ -22,6 +24,11 @@ describe('App interactions', () => {
     expect(JSON.parse(localStorage.getItem('zaowutai.brand-preset') ?? '{}').brandName).toBe('山海小店')
     await userEvent.click(screen.getByRole('button', { name: '抖音封面' }))
     expect(screen.getByText('1080 × 1920')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '选择素材 real.png' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '选择素材 real.png' }))
+    expect(screen.getByAltText('当前封面素材')).toHaveAttribute('src', '/uploads/asset.png')
+    fireEvent.change(screen.getByRole('slider', { name: '素材缩放' }), { target: { value: '135' } })
+    expect(localStorage.getItem('zaowutai.cover-layouts')).toContain('135')
   })
 
   it('switches the selected export specification', async () => {

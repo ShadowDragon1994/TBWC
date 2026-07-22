@@ -1,35 +1,36 @@
-# Implementation Plan: 模板与平台封面
+# Implementation Plan: 真实素材与封面裁切
 
 ## Overview
-启用模板与素材页面，提供本地品牌预设、常用话题、两套封面模板、平台规格切换和 PNG 导出。
+让模板工作室直接使用商品库真实图片，支持素材选择、上传、缩放和位置调整，并让预览与 PNG 导出保持一致。
 
 ## Architecture Decisions
-- 品牌预设保存在 localStorage，符合个人工具的本地优先定位。
-- 封面导出使用原生 Canvas，不增加图片处理依赖。
-- 平台规格固定为小红书 1080×1440、抖音 1080×1920，预览按比例缩放。
-- 只允许颜色控件和纯文本进入绘制函数，不渲染 HTML。
+- 复用商品库及现有图片上传 API，避免重复素材存储。
+- 裁切参数按“平台 + 模板”保存到 localStorage。
+- 图片只来自内置资源或同源 `/uploads`，避免 Canvas 跨域污染。
+- 缩放与偏移在读取和绘制前统一限制范围。
 
 ## Task List
 
-### Phase 1: Rules and persistence
-- [x] 平台规格、文件名清理和本地预设测试
-- [x] 品牌名称、颜色、常用话题持久化
+### Phase 1: Layout model
+- [x] 裁切参数校验、钳制和持久化测试
+- [x] Canvas 导出应用缩放与偏移
 
-### Phase 2: Cover studio
-- [x] 两套视觉模板与实时预览
-- [x] 小红书/抖音规格切换
-- [x] Canvas PNG 导出
+### Phase 2: Material workflow
+- [x] 加载并展示所有商品素材
+- [x] 从模板页向指定商品上传素材
+- [x] 素材选择、缩放和水平/垂直位置控件
+- [x] 小红书与抖音安全区域提示
 
 ### Checkpoint: Complete
 - [x] 全部测试、构建和安全审计通过
-- [x] Edge 完成预设保存、模板切换和 PNG 下载
+- [x] Edge 完成真实素材选择、裁切、持久化和 PNG 导出
 
 ## Risks and Mitigations
 | Risk | Impact | Mitigation |
 |---|---|---|
-| localStorage 数据损坏 | Medium | 读取时进行形状校验并回退默认值 |
-| Canvas 图片跨域污染 | Medium | 第一版仅使用同源内置图片 |
-| 文件名包含非法字符 | Medium | 导出前清理 Windows 非法字符并限制长度 |
+| 非同源图片污染 Canvas | High | 只接受内置资源与服务端 `/uploads` URL |
+| 旧布局参数越界 | Medium | 读取时统一钳制缩放和偏移 |
+| 上传文件伪造类型 | Medium | 延用服务端 MIME、数量和 10MB 限制 |
 
 ## Open Questions
-- 后续再接入自定义 Logo 和多素材上传。
+- 素材删除和重命名放到下一增量，避免误删商品正在使用的图片。
