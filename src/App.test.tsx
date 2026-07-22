@@ -12,6 +12,18 @@ describe('App interactions', () => {
     expect(screen.getByRole('heading', { name: '商品库' })).toBeInTheDocument()
   })
 
+  it('opens the cover template studio and saves a local brand preset', async () => {
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '模板与素材' }))
+    expect(screen.getByRole('heading', { name: '模板与素材' })).toBeInTheDocument()
+    await userEvent.clear(screen.getByLabelText('品牌名称'))
+    await userEvent.type(screen.getByLabelText('品牌名称'), '山海小店')
+    await userEvent.click(screen.getByRole('button', { name: '保存品牌预设' }))
+    expect(JSON.parse(localStorage.getItem('zaowutai.brand-preset') ?? '{}').brandName).toBe('山海小店')
+    await userEvent.click(screen.getByRole('button', { name: '抖音封面' }))
+    expect(screen.getByText('1080 × 1920')).toBeInTheDocument()
+  })
+
   it('switches the selected export specification', async () => {
     render(<App />)
     const detail = screen.getByRole('button', { name: /详情页长图 750px/ })
