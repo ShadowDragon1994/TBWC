@@ -57,6 +57,26 @@ describe('publishing task API', () => {
   })
 })
 
+describe('performance record API', () => {
+  it('creates, lists, updates and deletes platform performance data', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    const input = { publishingTaskId: null, productName: '青瓷杯', platform: '小红书', title: '雨后青瓷', recordedOn: '2026-07-22', impressions: 12000, views: 8000, likes: 620, favorites: 310, comments: 48, shares: 32, leads: 20, orders: 6, revenue: 588 }
+    const created = await request(app).post('/api/performance-records').send(input).expect(201)
+    await request(app).get('/api/performance-records?platform=小红书').expect(200).expect(response => expect(response.body.data[0].id).toBe(created.body.data.id))
+    await request(app).put(`/api/performance-records/${created.body.data.id}`).send({ ...input, views: 9000 }).expect(200).expect(response => expect(response.body.data.views).toBe(9000))
+    await request(app).delete(`/api/performance-records/${created.body.data.id}`).expect(204)
+    database.close()
+  })
+
+  it('rejects negative performance metrics', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    await request(app).post('/api/performance-records').send({ publishingTaskId: null, productName: '木梳', platform: '抖音', title: '木梳视频', recordedOn: '2026-07-22', impressions: -1, views: 0, likes: 0, favorites: 0, comments: 0, shares: 0, leads: 0, orders: 0, revenue: 0 }).expect(422)
+    database.close()
+  })
+})
+
 describe('product API', () => {
   it('creates, lists, updates and deletes a product', async () => {
     const database = createTestDatabase()

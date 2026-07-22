@@ -67,6 +67,13 @@ function migrate(database: AppDatabase) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS performance_records (
+      id TEXT PRIMARY KEY, publishing_task_id TEXT REFERENCES publishing_tasks(id) ON DELETE SET NULL,
+      product_name TEXT NOT NULL, platform TEXT NOT NULL CHECK(platform IN ('小红书','抖音')), title TEXT NOT NULL,
+      recorded_on TEXT NOT NULL, impressions INTEGER NOT NULL, views INTEGER NOT NULL, likes INTEGER NOT NULL,
+      favorites INTEGER NOT NULL, comments INTEGER NOT NULL, shares INTEGER NOT NULL, leads INTEGER NOT NULL,
+      orders INTEGER NOT NULL, revenue REAL NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+    );
   `)
   const creationColumns = new Set((database.prepare('PRAGMA table_info(creation_records)').all() as Array<{ name: string }>).map(column => column.name))
   if (!creationColumns.has('source')) database.exec("ALTER TABLE creation_records ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
@@ -75,6 +82,7 @@ function migrate(database: AppDatabase) {
   if (!creationColumns.has('published_url')) database.exec("ALTER TABLE creation_records ADD COLUMN published_url TEXT NOT NULL DEFAULT ''")
   database.exec('CREATE INDEX IF NOT EXISTS creation_records_history_idx ON creation_records(product_name, platform, version_number DESC)')
   database.exec('CREATE INDEX IF NOT EXISTS publishing_tasks_board_idx ON publishing_tasks(status, planned_at)')
+  database.exec('CREATE INDEX IF NOT EXISTS performance_records_report_idx ON performance_records(platform, recorded_on DESC)')
   database.exec('PRAGMA foreign_keys = ON;')
 }
 

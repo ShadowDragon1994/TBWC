@@ -21,6 +21,9 @@ import { createSecretService } from './ai/secret.service'
 import { createPublishingTaskRepository } from './publishing-tasks/publishing-task.repository'
 import { publishingTaskInputSchema, publishingTaskQuerySchema } from './publishing-tasks/publishing-task.schema'
 import { createPublishingTaskService, PublishingTaskNotFoundError } from './publishing-tasks/publishing-task.service'
+import { createPerformanceRecordRepository } from './performance-records/performance-record.repository'
+import { performanceRecordInputSchema, performanceRecordQuerySchema } from './performance-records/performance-record.schema'
+import { createPerformanceRecordService, PerformanceRecordNotFoundError } from './performance-records/performance-record.service'
 
 export function createApp({ database, uploadDir, encryptionKey = randomBytes(32), fetchImpl = fetch }: { database: AppDatabase; uploadDir: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
@@ -32,6 +35,8 @@ export function createApp({ database, uploadDir, encryptionKey = randomBytes(32)
   const aiService = createAiService(createAiSettingsRepository(database), createSecretService(encryptionKey), fetchImpl)
   const publishingTaskRepository = createPublishingTaskRepository(database)
   const publishingTaskService = createPublishingTaskService(publishingTaskRepository)
+  const performanceRecordRepository = createPerformanceRecordRepository(database)
+  const performanceRecordService = createPerformanceRecordService(performanceRecordRepository)
   const upload = multer({
     storage: multer.diskStorage({ destination: uploadDir, filename: (_request, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -48,6 +53,8 @@ export function createApp({ database, uploadDir, encryptionKey = randomBytes(32)
     restoreCreationRecords: (records: Parameters<typeof creationRecordRepository.replaceAll>[0]) => creationRecordRepository.replaceAll(records),
     listPublishingTasks: () => publishingTaskRepository.list({ platform: '', status: '', productName: '' }),
     restorePublishingTasks: (tasks: Parameters<typeof publishingTaskRepository.replaceAll>[0]) => publishingTaskRepository.replaceAll(tasks),
+    listPerformanceRecords: () => performanceRecordRepository.list({ platform: '', productName: '' }),
+    restorePerformanceRecords: (records: Parameters<typeof performanceRecordRepository.replaceAll>[0]) => performanceRecordRepository.replaceAll(records),
   }
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
@@ -91,6 +98,10 @@ export function createApp({ database, uploadDir, encryptionKey = randomBytes(32)
   app.post('/api/publishing-tasks', (request, response) => response.status(201).json({ data: publishingTaskService.create(publishingTaskInputSchema.parse(request.body)) }))
   app.put('/api/publishing-tasks/:id', (request, response) => response.json({ data: publishingTaskService.update(String(request.params.id), publishingTaskInputSchema.parse(request.body)) }))
   app.delete('/api/publishing-tasks/:id', (request, response) => { publishingTaskService.remove(String(request.params.id)); response.status(204).end() })
+  app.get('/api/performance-records', (request, response) => response.json({ data: performanceRecordService.list(performanceRecordQuerySchema.parse(request.query)) }))
+  app.post('/api/performance-records', (request, response) => response.status(201).json({ data: performanceRecordService.create(performanceRecordInputSchema.parse(request.body)) }))
+  app.put('/api/performance-records/:id', (request, response) => response.json({ data: performanceRecordService.update(String(request.params.id), performanceRecordInputSchema.parse(request.body)) }))
+  app.delete('/api/performance-records/:id', (request, response) => { performanceRecordService.remove(String(request.params.id)); response.status(204).end() })
   app.get('/api/ai/settings', (_request, response) => response.json({ data: aiService.getSettings() }))
   app.put('/api/ai/settings', (request, response) => response.json({ data: aiService.saveSettings(aiSettingsInputSchema.parse(request.body)) }))
   app.post('/api/ai/test', async (_request, response, next) => {
@@ -106,6 +117,7 @@ export function createApp({ database, uploadDir, encryptionKey = randomBytes(32)
     if (error instanceof ProductNotFoundError) return response.status(404).json({ code: 'NOT_FOUND', message: error.message })
     if (error instanceof CreationRecordNotFoundError) return response.status(404).json({ code: 'NOT_FOUND', message: error.message })
     if (error instanceof PublishingTaskNotFoundError) return response.status(404).json({ code: 'NOT_FOUND', message: error.message })
+    if (error instanceof PerformanceRecordNotFoundError) return response.status(404).json({ code: 'NOT_FOUND', message: error.message })
     if (error instanceof AiConfigurationError) return response.status(422).json({ code: 'AI_CONFIGURATION_ERROR', message: error.message })
     if (error instanceof AiUpstreamError) return response.status(502).json({ code: 'AI_UPSTREAM_ERROR', message: error.message })
     if (error instanceof multer.MulterError) return response.status(422).json({ code: 'UPLOAD_ERROR', message: error.code === 'LIMIT_FILE_SIZE' ? '图片不能超过 10MB' : '图片上传失败' })

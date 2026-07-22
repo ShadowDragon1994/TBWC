@@ -1,0 +1,5 @@
+export type PerformanceDraft = { publishingTaskId:string|null; productName:string; platform:'小红书'|'抖音'; title:string; recordedOn:string; impressions:number; views:number; likes:number; favorites:number; comments:number; shares:number; leads:number; orders:number; revenue:number }
+export type PerformanceRecord = PerformanceDraft & { id:string; createdAt:string; updatedAt:string }
+async function api<T>(path:string,options?:RequestInit):Promise<T>{const response=await fetch(path,options);if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.message||'表现数据操作失败')}return response.status===204?undefined as T:response.json()}
+const json=(method:string,body:unknown):RequestInit=>({method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+export const performanceApi={list:()=>api<{data:PerformanceRecord[]}>('/api/performance-records?'),create:(draft:PerformanceDraft)=>api<{data:PerformanceRecord}>('/api/performance-records',json('POST',draft)),remove:(id:string)=>api<void>(`/api/performance-records/${id}`,{method:'DELETE'})}
