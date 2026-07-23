@@ -76,12 +76,22 @@ describe('App interactions', () => {
   })
 
   it('opens evidence-based strategy recommendations', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    const fetchMock = vi.fn().mockImplementation((input: string, options?: RequestInit) => {
+      if (input === '/api/publishing-tasks' && options?.method === 'POST') {
+        const draft = JSON.parse(String(options.body))
+        return Promise.resolve(new Response(JSON.stringify({ data: { ...draft, id: 'new-task', actualPublishedAt: null, createdAt: '', updatedAt: '' } }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: '策略建议' }))
     expect(await screen.findByRole('heading', { name: '内容策略建议' })).toBeInTheDocument()
     expect(screen.getAllByText('数据依据')).toHaveLength(3)
     expect(screen.getByText('下周内容清单')).toBeInTheDocument()
+    await userEvent.click(screen.getAllByRole('button', { name: '创建任务' })[0])
+    expect(await screen.findByRole('button', { name: '已创建' })).toBeDisabled()
+    expect(fetchMock).toHaveBeenCalledWith('/api/publishing-tasks', expect.objectContaining({ method: 'POST' }))
   })
 
   it('filters version history by product, platform and source', async () => {
