@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Archive, BarChart3, Box, CalendarDays, Check, ChevronDown, CircleHelp, Download, FileImage, Home, Image, Lightbulb, Lock, RefreshCw, Save, Settings, Sparkles, TriangleAlert } from 'lucide-react'
 import productImage from './assets/bookmark-gift.png'
-import { analyzePlatformContent, checkCompliance, generateMockContent, type ContentPlatform } from './features/creation/creation'
+import { analyzePlatformContent, generateMockContent, type ContentPlatform } from './features/creation/creation'
 import { mockProduct } from './features/products/mockProducts'
 import { ProductLibrary } from './features/products/ProductLibrary'
 import type { ProductRecord } from './features/products/products.api'
@@ -15,6 +15,7 @@ import { PublishingBoard } from './features/publishing-tasks/PublishingBoard'
 import { AnalyticsDashboard } from './features/analytics/AnalyticsDashboard'
 import { StrategyPage } from './features/strategy/StrategyPage'
 import { creativeTasksApi, type CreativeTaskStatus } from './features/creative-tasks/creative-tasks.api'
+import { applyComplianceDecision, runCompliance, type ComplianceStatus } from './features/compliance/compliance'
 
 const nav = [[Home, '今日工作台'], [Box, '商品库'], [Archive, '创作记录'], [CalendarDays, '发布任务'], [BarChart3, '数据复盘'], [Lightbulb, '策略建议'], [Image, '模板与素材'], [Settings, '设置']] as const
 const exportOptions = ['主图 800×800', '详情页长图 750px', '竖版海报 3:4']
@@ -56,10 +57,15 @@ export function App() {
   const [candidates, setCandidates] = useState<Array<ReturnType<typeof generateMockContent>>>([])
   const [creativeTaskId, setCreativeTaskId] = useState<string | null>(null)
   const [creativeTaskStatus, setCreativeTaskStatus] = useState<CreativeTaskStatus>('draft')
-  const findings = useMemo(() => checkCompliance(`${content.title} ${content.sellingPoints.join(' ')} ${content.body}`), [content])
   const forbiddenTerms = useMemo(() => ('forbiddenTerms' in currentProduct ? currentProduct.forbiddenTerms ?? '' : '').split(/[，,、\n]/).map(term => term.trim()).filter(Boolean), [currentProduct])
   const quality = useMemo(() => analyzePlatformContent(platform, content.title, content.body, forbiddenTerms), [platform, content, forbiddenTerms])
-  const allFindings = useMemo(() => [...findings, ...quality.findings], [findings, quality.findings])
+  const [authorizationRecorded, setAuthorizationRecorded] = useState(false)
+  const [complianceDecisions, setComplianceDecisions] = useState<Record<string, ComplianceStatus>>({})
+  const complianceFindings = useMemo(() => runCompliance({ title: content.title, body: `${content.sellingPoints.join(' ')} ${content.body}`, authorizationRecorded, hasAiLabel: true }).map(item => ({ ...item, status: complianceDecisions[item.id] ?? item.status })), [content, authorizationRecorded, complianceDecisions])
+  const allFindings = useMemo(() => [
+    ...complianceFindings.map(item => ({ level: item.status === 'unresolved' && item.severity !== 'suggest' ? 'warning' as const : 'pass' as const, message: `${item.location}：${item.reason}` })),
+    ...quality.findings,
+  ], [complianceFindings, quality.findings])
 
   useEffect(() => {
     const timer = window.setTimeout(() => localStorage.setItem(localDraftKey, JSON.stringify({ version: 1, platform, product: currentProduct, content, editingRecordId })), 500)
@@ -220,7 +226,11 @@ export function App() {
             <label>{platform === '抖音' ? '口播脚本' : '正文笔记'} <small>{content.body.length}/10000</small></label><textarea aria-label="正文脚本" disabled={locked} value={content.body} onChange={event => setContent({...content, body:event.target.value})}/><button className="regen" onClick={() => void rewrite('rewrite_body')}><RefreshCw size={14}/>只改写正文</button>
             <label>补充要求 <small>{guidance.length}/1000</small></label><textarea className="guidance" aria-label="补充要求" disabled={locked} value={guidance} onChange={event => setGuidance(event.target.value)} placeholder="例如：语气自然、突出送老师场景"/>
           </section>
-          <section className="panel compliance"><div className="panel-title">内容质量 <span>{platform === '抖音' ? `约 ${quality.metrics.estimatedSeconds} 秒` : `${quality.metrics.topicCount} 个话题`}</span></div>{allFindings.map((finding, index) => <div className={finding.level} key={index}>{finding.level === 'warning' ? <TriangleAlert/> : <Check/>}<span>{finding.message}</span></div>)}</section>
+          <section className="panel compliance"><div className="panel-title">合规与内容质量 <span>{platform === '抖音' ? `约 ${quality.metrics.estimatedSeconds} 秒` : `${quality.metrics.topicCount} 个话题`}</span></div>
+            <label className="authorization-check"><input type="checkbox" checked={authorizationRecorded} onChange={event => setAuthorizationRecorded(event.target.checked)}/>已核对图片与字体授权凭证</label>
+            {complianceFindings.map(item => <div className={`compliance-finding ${item.severity} ${item.status}`} key={item.id}>{item.severity === 'block' || item.status === 'unresolved' ? <TriangleAlert/> : <Check/>}<span><b>{item.location} · {item.severity === 'block' ? '阻断' : item.severity === 'confirm' ? '需确认' : '建议'}</b>{item.reason}<small>{item.suggestion}</small></span>{item.severity !== 'block' && item.status === 'unresolved' && <button onClick={() => setComplianceDecisions(current => ({ ...current, [item.id]: applyComplianceDecision(item, 'accepted').status }))}>{item.severity === 'confirm' ? '确认继续' : '忽略建议'}</button>}</div>)}
+            {quality.findings.map((finding, index) => <div className={finding.level} key={`quality-${index}`}>{finding.level === 'warning' ? <TriangleAlert/> : <Check/>}<span>{finding.message}</span></div>)}
+          </section>
           <PublishPackagePanel platform={platform} title={content.title} sellingPoints={content.sellingPoints} body={content.body} findings={allFindings} onStatus={savePublication} onNotice={setNotice}/>
         </aside>
       </section>

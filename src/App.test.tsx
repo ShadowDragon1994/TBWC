@@ -143,6 +143,16 @@ describe('App interactions', () => {
     expect(screen.getByText(/4 段分镜/)).toBeInTheDocument()
   })
 
+  it('shows actionable compliance findings and records user confirmations', async () => {
+    render(<App />)
+    expect(screen.getAllByText(/需确认/).length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/限量描述需要库存或活动依据/).length).toBeGreaterThan(0)
+    await userEvent.click(screen.getAllByRole('button', { name: '确认继续' })[0])
+    expect(screen.getAllByText(/需确认/).length).toBeGreaterThan(0)
+    await userEvent.click(screen.getByRole('checkbox', { name: '已核对图片与字体授权凭证' }))
+    expect(screen.queryByText('尚未记录图片与字体授权凭证')).not.toBeInTheDocument()
+  })
+
   it('continues editing a saved Douyin record in the workbench', async () => {
     const record = { id: 'r1', productId: null, productName: '青瓷杯', platform: '抖音', title: '历史标题', sellingPoints: ['历史卖点'], body: '历史口播正文', createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z' }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [record] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))

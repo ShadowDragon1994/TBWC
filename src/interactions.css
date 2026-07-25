@@ -17,6 +17,15 @@
 .copy-panel textarea { width: calc(100% - 30px); min-height: 150px; margin: 0 15px; padding: 10px; resize: vertical; border: 1px solid var(--line); border-radius: 6px; outline: 0; font: 12px/1.65 inherit; }
 .copy-panel textarea:focus { border-color: var(--red); }
 .copy-panel textarea:disabled { color: #8d857e; background: #f8f6f3; }
+.authorization-check { display:flex; align-items:center; gap:7px; margin:10px 14px; color:#625b54; font-size:12px; }
+.compliance .compliance-finding { align-items:flex-start; }
+.compliance-finding span { display:flex; flex-direction:column; gap:3px; }
+.compliance-finding span b { font-size:11px; }
+.compliance-finding span small { color:#827970; line-height:1.45; }
+.compliance-finding.block { background:#fff0ed; color:#92372d; }
+.compliance-finding.confirm { background:#fff8ea; color:#805d21; }
+.compliance-finding.suggest { background:#eef5fa; color:#41677d; }
+.compliance-finding.accepted { background:#edf6ef; color:#3f7150; }
 .copy-panel textarea.guidance { min-height: 72px; }
 
 .template-1 .art-title {
