@@ -9,6 +9,7 @@ import { CreationRecords } from './features/creation-records/CreationRecords'
 import { creationRecordsApi, type CreationRecord, type CreationRecordSource, type PublishStatus } from './features/creation-records/creation-records.api'
 import { AiSettingsPage } from './features/ai/AiSettingsPage'
 import { aiApi, type AiCallUsage, type AiSettings } from './features/ai/ai.api'
+import { getBudgetStatus } from './features/ai/budget'
 import { PublishPackagePanel } from './features/publishing/PublishPackagePanel'
 import { TemplateStudio } from './features/templates/TemplateStudio'
 import { PublishingBoard } from './features/publishing-tasks/PublishingBoard'
@@ -87,12 +88,20 @@ export function App() {
     const results = await Promise.allSettled(snapshots.map(item => saveSnapshot(item.snapshot, item.source)))
     return results.every(result => result.status === 'fulfilled')
   }
+  const confirmAvailableBudget = async (settings: AiSettings) => {
+    if (settings.mode !== 'real' || !settings.monthlyBudget) return true
+    const { data } = await aiApi.usage()
+    const status = getBudgetStatus(data.summary.estimatedCost, data.summary.monthlyBudget)
+    if (status.level !== 'exceeded') return true
+    return window.confirm(`本月 AI 费用已达到预算（¥${data.summary.estimatedCost.toFixed(4)} / ¥${data.summary.monthlyBudget.toFixed(2)}）。是否仍要继续生成？`)
+  }
 
   const generate = async () => {
     setGenerating(true)
     try {
       const settings = aiSettings ?? (await aiApi.settings()).data
       setAiSettings(settings)
+      if (!await confirmAvailableBudget(settings)) { setNotice('已取消生成，本月 AI 预算不会继续增加'); return }
       const next = variant + 1
       setVariant(next)
       if (settings.mode === 'real') {
@@ -115,6 +124,7 @@ export function App() {
     try {
       const settings = aiSettings ?? (await aiApi.settings()).data
       setAiSettings(settings)
+      if (!await confirmAvailableBudget(settings)) { setNotice('已取消改写，本月 AI 预算不会继续增加'); return }
       if (settings.mode === 'real') {
         const { data } = await aiApi.generate({ platform, product: { name: currentProduct.name, category: currentProduct.category, price: currentProduct.price, material: currentProduct.material, audience: currentProduct.audience, scene: currentProduct.scene }, guidance, operation, count: 1, currentContent: content })
         setLastAiUsage(data.usage ?? null)

@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { BarChart3, CheckCircle2, KeyRound, PlugZap, Save, ShieldCheck } from 'lucide-react'
-import { aiApi, type AiSettings, type AiUsageSummary } from './ai.api'
+import { aiApi, type AiSettings, type AiUsageRecord, type AiUsageSummary } from './ai.api'
+import { getBudgetStatus } from './budget'
 import './ai-settings.css'
+import './usage-details.css'
 
 const defaults = {
   openai: { baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1-mini' },
@@ -20,13 +22,16 @@ export function AiSettingsPage({ onSaved }: { onSaved: (settings: AiSettings) =>
   const [outputPricePerMillion, setOutputPricePerMillion] = useState(0)
   const [monthlyBudget, setMonthlyBudget] = useState(0)
   const [usage, setUsage] = useState<AiUsageSummary | null>(null)
+  const [records, setRecords] = useState<AiUsageRecord[]>([])
+  const [platformFilter, setPlatformFilter] = useState('')
+  const [resultFilter, setResultFilter] = useState('')
 
   useEffect(() => {
     void aiApi.settings().then(({ data }) => {
       setMode(data.mode); setBaseUrl(data.baseUrl); setModel(data.model); setHasApiKey(data.hasApiKey)
       setInputPricePerMillion(data.inputPricePerMillion ?? 0); setOutputPricePerMillion(data.outputPricePerMillion ?? 0); setMonthlyBudget(data.monthlyBudget ?? 0)
     }).catch(error => setMessage(error instanceof Error ? error.message : '设置加载失败'))
-    void aiApi.usage().then(({ data }) => setUsage(data.summary)).catch(() => setUsage(null))
+    void aiApi.usage().then(({ data }) => { setUsage(data.summary); setRecords(data.records) }).catch(() => setUsage(null))
   }, [])
   const applyPreset = (preset: keyof typeof defaults) => { setBaseUrl(defaults[preset].baseUrl); setModel(defaults[preset].model) }
   const save = async () => {
@@ -41,14 +46,22 @@ export function AiSettingsPage({ onSaved }: { onSaved: (settings: AiSettings) =>
     setBusy(true)
     try { const { data } = await aiApi.test(); setMessage(`连接成功，当前模型：${data.model}`) } catch (error) { setMessage(error instanceof Error ? error.message : '连接失败') } finally { setBusy(false) }
   }
+  const budgetStatus = getBudgetStatus(usage?.estimatedCost ?? 0, usage?.monthlyBudget ?? 0)
+  const visibleRecords = records.filter(record => (!platformFilter || record.platform === platformFilter) && (!resultFilter || String(record.success) === resultFilter))
+  const operationLabel = (operation: string) => ({ generate: '生成内容', rewrite_title: '改写标题', rewrite_selling_points: '改写卖点', rewrite_body: '改写正文' })[operation] ?? operation
 
   return <section className="ai-settings-page">
     <header><div><h1>AI 生成设置</h1><p>连接兼容服务，为小红书和抖音生成真实文案。</p></div><span className={mode === 'real' ? 'real' : ''}>{mode === 'real' ? '真实 AI' : '模拟模式'}</span></header>
     {message && <div className="ai-settings-message" role="status"><CheckCircle2/>{message}</div>}
+    {budgetStatus.level !== 'none' && <div className={`budget-alert ${budgetStatus.level}`} role="alert">{budgetStatus.level === 'exceeded' ? '本月 AI 费用已达到预算，继续生成前会要求确认。' : `本月 AI 费用已使用 ${budgetStatus.percent.toFixed(1)}%，请留意剩余预算。`}</div>}
     <section className="usage-card">
       <header><span><BarChart3/>本月 AI 用量</span><small>{usage?.unknownUsageCalls ? `${usage.unknownUsageCalls} 次未返回 Token` : '用量均有记录'}</small></header>
       <div className="usage-grid"><article><b>{usage?.calls ?? 0}</b><span>调用次数</span></article><article><b>{usage ? `${usage.successfulCalls}/${usage.calls}` : '0/0'}</b><span>成功调用</span></article><article><b>{((usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0)).toLocaleString('zh-CN')}</b><span>Token 合计</span></article><article><b>¥{(usage?.estimatedCost ?? 0).toFixed(4)}</b><span>估算费用</span></article></div>
       <div className="budget-progress"><span><b>预算进度</b><em>{usage?.monthlyBudget ? `${Math.min(100, (usage.estimatedCost / usage.monthlyBudget) * 100).toFixed(1)}%` : '未设置预算'}</em></span><div><i style={{ width: `${usage?.monthlyBudget ? Math.min(100, (usage.estimatedCost / usage.monthlyBudget) * 100) : 0}%` }}/></div></div>
+    </section>
+    <section className="usage-details">
+      <header><h2>调用明细</h2><div><select aria-label="调用平台" value={platformFilter} onChange={event => setPlatformFilter(event.target.value)}><option value="">全部平台</option><option value="小红书">小红书</option><option value="抖音">抖音</option></select><select aria-label="调用结果" value={resultFilter} onChange={event => setResultFilter(event.target.value)}><option value="">全部结果</option><option value="true">成功</option><option value="false">失败</option></select></div></header>
+      {visibleRecords.length ? <div className="usage-list">{visibleRecords.map(record => <article key={record.id}><span><b>{record.platform} · {operationLabel(record.operation)}</b><small>{new Date(record.createdAt).toLocaleString('zh-CN')} · {record.model}</small></span><span><b className={record.success ? 'success' : 'failure'}>{record.success ? '成功' : '失败'}</b><small>{record.estimatedCost === null ? '费用未知' : `¥${record.estimatedCost.toFixed(4)}`} · {record.latencyMs}ms</small></span>{!record.success && record.errorMessage && <p>{record.errorMessage}</p>}</article>)}</div> : <p className="usage-empty">没有符合条件的调用记录</p>}
     </section>
     <div className="settings-card">
       <h2>生成模式</h2><div className="mode-options"><button aria-pressed={mode === 'mock'} onClick={() => setMode('mock')}><b>模拟模式</b><small>无需密钥，使用内置模板</small></button><button aria-pressed={mode === 'real'} onClick={() => setMode('real')}><b>真实 AI</b><small>使用你配置的模型服务</small></button></div>

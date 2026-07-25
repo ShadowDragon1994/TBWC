@@ -222,6 +222,23 @@ describe('App interactions', () => {
     expect(JSON.parse(String(fetchMock.mock.calls.find(([url, options]) => url === '/api/ai/settings' && options?.method === 'PUT')?.[1]?.body)).inputPricePerMillion).toBe(3)
   })
 
+  it('filters AI usage records by platform and result', async () => {
+    const settings = { mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'model', hasApiKey: true, inputPricePerMillion: 2, outputPricePerMillion: 8, monthlyBudget: 10, updatedAt: null }
+    const records = [
+      { id: '1', operation: 'generate', platform: '小红书', model: 'model', inputTokens: 100, outputTokens: 50, latencyMs: 500, estimatedCost: 0.001, success: true, errorMessage: '', createdAt: '2026-07-25T01:00:00.000Z' },
+      { id: '2', operation: 'rewrite_title', platform: '抖音', model: 'model', inputTokens: null, outputTokens: null, latencyMs: 800, estimatedCost: null, success: false, errorMessage: '服务超时', createdAt: '2026-07-25T02:00:00.000Z' },
+    ]
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((input: string) => Promise.resolve(new Response(JSON.stringify(input === '/api/ai/usage'
+      ? { data: { summary: { calls: 2, successfulCalls: 1, inputTokens: 100, outputTokens: 50, estimatedCost: 0.001, unknownUsageCalls: 1, monthlyBudget: 10 }, records } }
+      : { data: settings }), { status: 200, headers: { 'Content-Type': 'application/json' } }))))
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '设置' }))
+    expect(await screen.findByText('服务超时')).toBeInTheDocument()
+    await userEvent.selectOptions(screen.getByLabelText('调用平台'), '小红书')
+    expect(screen.getByText(/小红书 · 生成内容/)).toBeInTheDocument()
+    expect(screen.queryByText('服务超时')).not.toBeInTheDocument()
+  })
+
   it('uses the local gateway when real AI mode is enabled', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'model', hasApiKey: true, updatedAt: null } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
@@ -232,6 +249,19 @@ describe('App interactions', () => {
     expect(await screen.findByText(/真实 AI 已生成 3 个候选版本/)).toBeInTheDocument()
     expect(screen.getByLabelText('生成标题')).toHaveValue('AI 真实标题')
     expect(screen.getByText('model · 850ms · ¥0.0060')).toBeInTheDocument()
+  })
+
+  it('requires confirmation before a real AI call after the monthly budget is reached', async () => {
+    const settings = { mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'model', hasApiKey: true, inputPricePerMillion: 2, outputPricePerMillion: 8, monthlyBudget: 10, updatedAt: null }
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: settings }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { summary: { calls: 5, successfulCalls: 5, inputTokens: 1000, outputTokens: 500, estimatedCost: 10, unknownUsageCalls: 0, monthlyBudget: 10 }, records: [] } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '生成内容' }))
+    expect(await screen.findByText('已取消生成，本月 AI 预算不会继续增加')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('offers three mock candidates and rewrites only the selected section', async () => {
