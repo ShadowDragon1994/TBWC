@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs'
 import { randomBytes, randomUUID } from 'node:crypto'
-import { extname } from 'node:path'
+import { extname, resolve } from 'node:path'
 import express, { type ErrorRequestHandler } from 'express'
 import helmet from 'helmet'
 import multer from 'multer'
@@ -25,7 +25,7 @@ import { createPerformanceRecordRepository } from './performance-records/perform
 import { performanceRecordInputSchema, performanceRecordQuerySchema } from './performance-records/performance-record.schema'
 import { createPerformanceRecordService, PerformanceRecordNotFoundError } from './performance-records/performance-record.service'
 
-export function createApp({ database, uploadDir, encryptionKey = randomBytes(32), fetchImpl = fetch }: { database: AppDatabase; uploadDir: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch }) {
+export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
   const app = express()
   const productService = createProductService(createProductRepository(database))
@@ -111,6 +111,10 @@ export function createApp({ database, uploadDir, encryptionKey = randomBytes(32)
     try { response.json({ data: await aiService.generate(aiGenerateInputSchema.parse(request.body)) }) } catch (error) { next(error) }
   })
 
+  if (frontendDir) {
+    app.use(express.static(frontendDir, { index: 'index.html', maxAge: '1h' }))
+    app.get('/{*path}', (request, response, next) => request.path.startsWith('/api/') ? next() : response.sendFile(resolve(frontendDir, 'index.html')))
+  }
   app.use((_request, response) => response.status(404).json({ code: 'NOT_FOUND', message: '接口不存在' }))
   const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
     if (error instanceof ZodError) return response.status(422).json({ code: 'VALIDATION_ERROR', message: '输入信息不完整或格式错误', fields: error.issues })

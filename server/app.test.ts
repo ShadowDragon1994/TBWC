@@ -1,10 +1,25 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
 import { createApp } from './app'
 import { createTestDatabase } from './shared/database'
+
+describe('production frontend hosting', () => {
+  it('serves the built app for browser routes while preserving API 404 responses', async () => {
+    const frontendDir = mkdtempSync(join(tmpdir(), 'zaowutai-frontend-'))
+    writeFileSync(join(frontendDir, 'index.html'), '<!doctype html><title>造物台生产页</title>')
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads', frontendDir })
+
+    await request(app).get('/strategy').expect('Content-Type', /html/).expect(200).expect(/造物台生产页/)
+    await request(app).get('/api/does-not-exist').expect('Content-Type', /json/).expect(404)
+
+    database.close()
+    rmSync(frontendDir, { recursive: true, force: true })
+  })
+})
 
 describe('publishing task API', () => {
   it('creates, filters, publishes and deletes a publishing task', async () => {
