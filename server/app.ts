@@ -36,7 +36,8 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   const assetRepository = createAssetRepository(database)
   const creationRecordRepository = createCreationRecordRepository(database)
   const creationRecordService = createCreationRecordService(creationRecordRepository)
-  const aiService = createAiService(createAiSettingsRepository(database), createAiUsageRepository(database), createSecretService(encryptionKey), fetchImpl)
+  const aiUsageRepository = createAiUsageRepository(database)
+  const aiService = createAiService(createAiSettingsRepository(database), aiUsageRepository, createSecretService(encryptionKey), fetchImpl)
   const publishingTaskRepository = createPublishingTaskRepository(database)
   const publishingTaskService = createPublishingTaskService(publishingTaskRepository)
   const performanceRecordRepository = createPerformanceRecordRepository(database)
@@ -63,6 +64,8 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
     restorePerformanceRecords: (records: Parameters<typeof performanceRecordRepository.replaceAll>[0]) => performanceRecordRepository.replaceAll(records),
     listCreativeTasks: () => creativeTaskRepository.list({ status: '', platform: '' }),
     restoreCreativeTasks: (tasks: Parameters<typeof creativeTaskRepository.replaceAll>[0]) => creativeTaskRepository.replaceAll(tasks),
+    listAiUsageRecords: () => aiUsageRepository.list(100000),
+    restoreAiUsageRecords: (records: Parameters<typeof aiUsageRepository.replaceAll>[0]) => aiUsageRepository.replaceAll(records),
   }
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))

@@ -9,6 +9,7 @@ import { creationRecordSchema, type CreationRecord } from '../creation-records/c
 import { publishingTaskSchema, type PublishingTask } from '../publishing-tasks/publishing-task.schema'
 import { performanceRecordSchema, type PerformanceRecord } from '../performance-records/performance-record.schema'
 import { creativeTaskSchema, type CreativeTask } from '../creative-tasks/creative-task.schema'
+import { aiUsageRecordSchema, type AiUsageRecord } from '../ai/usage.repository'
 
 const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp'] as const
 const assetSchema = z.object({
@@ -24,6 +25,7 @@ const archiveManifestSchema = z.object({
   publishingTasks: z.array(publishingTaskSchema).max(20000).default([]),
   performanceRecords: z.array(performanceRecordSchema).max(50000).default([]),
   creativeTasks: z.array(creativeTaskSchema).max(20000).default([]),
+  aiUsageRecords: z.array(aiUsageRecordSchema).max(100000).default([]),
 })
 
 type BackupDependencies = {
@@ -40,6 +42,8 @@ type BackupDependencies = {
   restorePerformanceRecords: (records: PerformanceRecord[]) => void
   listCreativeTasks: () => CreativeTask[]
   restoreCreativeTasks: (tasks: CreativeTask[]) => void
+  listAiUsageRecords: () => AiUsageRecord[]
+  restoreAiUsageRecords: (records: AiUsageRecord[]) => void
 }
 
 export async function createBackupArchive(dependencies: BackupDependencies) {
@@ -50,7 +54,8 @@ export async function createBackupArchive(dependencies: BackupDependencies) {
   const publishingTasks = dependencies.listPublishingTasks()
   const performanceRecords = dependencies.listPerformanceRecords()
   const creativeTasks = dependencies.listCreativeTasks()
-  zip.file('manifest.json', JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), products, assets, creationRecords, publishingTasks, performanceRecords, creativeTasks }, null, 2))
+  const aiUsageRecords = dependencies.listAiUsageRecords()
+  zip.file('manifest.json', JSON.stringify({ version: 2, exportedAt: new Date().toISOString(), products, assets, creationRecords, publishingTasks, performanceRecords, creativeTasks, aiUsageRecords }, null, 2))
   for (const asset of assets) {
     if (basename(asset.storedName) !== asset.storedName) throw new Error('备份中存在无效图片文件名')
     zip.file(`uploads/${asset.storedName}`, await readFile(join(dependencies.uploadDir, asset.storedName)))
@@ -80,5 +85,6 @@ export async function restoreBackupArchive(buffer: Buffer, dependencies: BackupD
   dependencies.restorePublishingTasks(manifest.publishingTasks)
   dependencies.restorePerformanceRecords(manifest.performanceRecords)
   dependencies.restoreCreativeTasks(manifest.creativeTasks)
-  return { products: manifest.products.length, assets: manifest.assets.length, creationRecords: manifest.creationRecords.length, publishingTasks: manifest.publishingTasks.length, performanceRecords: manifest.performanceRecords.length, creativeTasks: manifest.creativeTasks.length }
+  dependencies.restoreAiUsageRecords(manifest.aiUsageRecords)
+  return { products: manifest.products.length, assets: manifest.assets.length, creationRecords: manifest.creationRecords.length, publishingTasks: manifest.publishingTasks.length, performanceRecords: manifest.performanceRecords.length, creativeTasks: manifest.creativeTasks.length, aiUsageRecords: manifest.aiUsageRecords.length }
 }

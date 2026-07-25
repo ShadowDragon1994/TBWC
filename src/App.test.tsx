@@ -203,15 +203,35 @@ describe('App interactions', () => {
     expect(await screen.findByRole('heading', { name: 'AI 生成设置' })).toBeInTheDocument()
   })
 
+  it('shows AI usage, budget progress and saves configurable token prices', async () => {
+    const settings = { mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'model', hasApiKey: true, inputPricePerMillion: 2, outputPricePerMillion: 8, monthlyBudget: 10, updatedAt: null }
+    const usage = { summary: { calls: 4, successfulCalls: 3, inputTokens: 1200, outputTokens: 600, estimatedCost: 2.5, unknownUsageCalls: 1, monthlyBudget: 10 }, records: [] }
+    const fetchMock = vi.fn().mockImplementation((input: string, options?: RequestInit) => {
+      if (input === '/api/ai/usage') return Promise.resolve(new Response(JSON.stringify({ data: usage }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      if (input === '/api/ai/settings' && options?.method === 'PUT') return Promise.resolve(new Response(JSON.stringify({ data: settings }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify({ data: settings }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '设置' }))
+    expect(await screen.findByText('本月 AI 用量')).toBeInTheDocument()
+    expect(screen.getByText('¥2.5000')).toBeInTheDocument()
+    await userEvent.clear(screen.getByLabelText('输入 Token 单价'))
+    await userEvent.type(screen.getByLabelText('输入 Token 单价'), '3')
+    await userEvent.click(screen.getByRole('button', { name: '保存设置' }))
+    expect(JSON.parse(String(fetchMock.mock.calls.find(([url, options]) => url === '/api/ai/settings' && options?.method === 'PUT')?.[1]?.body)).inputPricePerMillion).toBe(3)
+  })
+
   it('uses the local gateway when real AI mode is enabled', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'model', hasApiKey: true, updatedAt: null } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { title: 'AI 真实标题', sellingPoints: ['真实卖点'], body: 'AI 真实正文', source: 'ai', candidates: [{ title: 'AI 真实标题', sellingPoints: ['真实卖点'], body: 'AI 真实正文' }, { title: '候选二', sellingPoints: ['卖点二'], body: '正文二' }, { title: '候选三', sellingPoints: ['卖点三'], body: '正文三' }] } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { title: 'AI 真实标题', sellingPoints: ['真实卖点'], body: 'AI 真实正文', source: 'ai', usage: { model: 'model', inputTokens: 1000, outputTokens: 500, latencyMs: 850, estimatedCost: 0.006 }, candidates: [{ title: 'AI 真实标题', sellingPoints: ['真实卖点'], body: 'AI 真实正文' }, { title: '候选二', sellingPoints: ['卖点二'], body: '正文二' }, { title: '候选三', sellingPoints: ['卖点三'], body: '正文三' }] } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     vi.stubGlobal('fetch', fetchMock)
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: '生成内容' }))
     expect(await screen.findByText(/真实 AI 已生成 3 个候选版本/)).toBeInTheDocument()
     expect(screen.getByLabelText('生成标题')).toHaveValue('AI 真实标题')
+    expect(screen.getByText('model · 850ms · ¥0.0060')).toBeInTheDocument()
   })
 
   it('offers three mock candidates and rewrites only the selected section', async () => {

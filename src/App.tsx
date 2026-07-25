@@ -8,7 +8,7 @@ import type { ProductRecord } from './features/products/products.api'
 import { CreationRecords } from './features/creation-records/CreationRecords'
 import { creationRecordsApi, type CreationRecord, type CreationRecordSource, type PublishStatus } from './features/creation-records/creation-records.api'
 import { AiSettingsPage } from './features/ai/AiSettingsPage'
-import { aiApi, type AiSettings } from './features/ai/ai.api'
+import { aiApi, type AiCallUsage, type AiSettings } from './features/ai/ai.api'
 import { PublishPackagePanel } from './features/publishing/PublishPackagePanel'
 import { TemplateStudio } from './features/templates/TemplateStudio'
 import { PublishingBoard } from './features/publishing-tasks/PublishingBoard'
@@ -58,6 +58,7 @@ export function App() {
   const [candidates, setCandidates] = useState<Array<ReturnType<typeof generateMockContent>>>([])
   const [creativeTaskId, setCreativeTaskId] = useState<string | null>(null)
   const [creativeTaskStatus, setCreativeTaskStatus] = useState<CreativeTaskStatus>('draft')
+  const [lastAiUsage, setLastAiUsage] = useState<AiCallUsage | null>(null)
   const forbiddenTerms = useMemo(() => ('forbiddenTerms' in currentProduct ? currentProduct.forbiddenTerms ?? '' : '').split(/[，,、\n]/).map(term => term.trim()).filter(Boolean), [currentProduct])
   const quality = useMemo(() => analyzePlatformContent(platform, content.title, content.body, forbiddenTerms), [platform, content, forbiddenTerms])
   const [authorizationRecorded, setAuthorizationRecorded] = useState(false)
@@ -96,6 +97,7 @@ export function App() {
       setVariant(next)
       if (settings.mode === 'real') {
         const { data } = await aiApi.generate({ platform, product: { name: currentProduct.name, category: currentProduct.category, price: currentProduct.price, material: currentProduct.material, audience: currentProduct.audience, scene: currentProduct.scene, sellingPoints: 'sellingPoints' in currentProduct ? currentProduct.sellingPoints : '', forbiddenTerms: 'forbiddenTerms' in currentProduct ? currentProduct.forbiddenTerms : '' }, guidance, count: 3, operation: 'generate' })
+        setLastAiUsage(data.usage ?? null)
         const options = data.candidates.map(candidate => ({ ...candidate, platform, status: '待编辑' as const }))
         setCandidates(options); setContent(options[0]); const saved = await saveSnapshots(options.map(option => ({ snapshot: option, source: 'generate' })))
         setNotice(saved ? '真实 AI 已生成 3 个候选版本，已自动保存' : '真实 AI 已生成 3 个候选版本；历史自动保存失败')
@@ -115,6 +117,7 @@ export function App() {
       setAiSettings(settings)
       if (settings.mode === 'real') {
         const { data } = await aiApi.generate({ platform, product: { name: currentProduct.name, category: currentProduct.category, price: currentProduct.price, material: currentProduct.material, audience: currentProduct.audience, scene: currentProduct.scene }, guidance, operation, count: 1, currentContent: content })
+        setLastAiUsage(data.usage ?? null)
         const updated = { ...content, ...(operation === 'rewrite_title' ? { title: data.title } : operation === 'rewrite_selling_points' ? { sellingPoints: data.sellingPoints } : { body: data.body }) }
         setContent(updated); await saveSnapshots([{ snapshot: updated, source: operation }])
       } else {
@@ -232,7 +235,7 @@ export function App() {
       {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name, platform)); setEditingRecordId(null); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : selectedNav === '创作记录' ? <CreationRecords onContinue={(record: CreationRecord) => { const recordPlatform: ContentPlatform = record.platform === '抖音' ? '抖音' : '小红书'; setCurrentProduct({ ...mockProduct, id: record.productId ?? mockProduct.id, name: record.productName }); setPlatform(recordPlatform); setContent({ platform: recordPlatform, title: record.title, sellingPoints: record.sellingPoints, body: record.body, status: '待编辑' }); setEditingRecordId(null); setSelectedNav('今日工作台'); setNotice(`已恢复历史版本 V${record.versionNumber ?? 1}，保存时会创建新版本`) }}/> : selectedNav === '发布任务' ? <PublishingBoard onNotice={setNotice}/> : selectedNav === '数据复盘' ? <AnalyticsDashboard onNotice={setNotice}/> : selectedNav === '策略建议' ? <StrategyPage onNotice={setNotice}/> : selectedNav === '模板与素材' ? <TemplateStudio defaultTitle={content.title} onNotice={setNotice}/> : selectedNav === '设置' ? <AiSettingsPage onSaved={settings => setAiSettings(settings)}/> : <>
       <section className="page-head">
         <div><h1>{currentProduct.name}创作任务</h1><div className="steps"><span className="done"><Check/>选择商品</span><i/><span className="current">2</span><b>生成内容</b><i/><span>3</span><b>审核调整</b><i/><span>4</span><b>导出完成</b></div></div>
-        <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '处理中' : exported ? '已导出' : creativeTaskStatus === 'draft' ? '草稿' : creativeTaskStatus === 'failed' ? '导出失败' : '待编辑'}</em></div><button className="secondary" onClick={() => void resumeCreativeTask()}><RefreshCw size={18}/>继续未完成任务</button><button className="primary" onClick={() => void generate()} disabled={generating}><Sparkles size={18}/>{generating ? '正在处理…' : '生成内容'}</button><button className="secondary" onClick={() => void saveCreation()} disabled={saving}><Save size={18}/>{saving ? '保存中…' : '保存创作'}</button><button className="secondary" onClick={() => void exportBundle()} disabled={generating || !canExport(complianceFindings)}><Download size={18}/>导出素材包</button></div>
+        <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '处理中' : exported ? '已导出' : creativeTaskStatus === 'draft' ? '草稿' : creativeTaskStatus === 'failed' ? '导出失败' : '待编辑'}</em>{lastAiUsage && <small>{lastAiUsage.model} · {lastAiUsage.latencyMs}ms · {lastAiUsage.estimatedCost === null ? '费用未知' : `¥${lastAiUsage.estimatedCost.toFixed(4)}`}</small>}</div><button className="secondary" onClick={() => void resumeCreativeTask()}><RefreshCw size={18}/>继续未完成任务</button><button className="primary" onClick={() => void generate()} disabled={generating}><Sparkles size={18}/>{generating ? '正在处理…' : '生成内容'}</button><button className="secondary" onClick={() => void saveCreation()} disabled={saving}><Save size={18}/>{saving ? '保存中…' : '保存创作'}</button><button className="secondary" onClick={() => void exportBundle()} disabled={generating || !canExport(complianceFindings)}><Download size={18}/>导出素材包</button></div>
       </section>
 
       <section className="workspace">

@@ -1,5 +1,20 @@
 import { randomUUID } from 'node:crypto'
+import { z } from 'zod'
 import type { AppDatabase } from '../shared/database'
+
+export const aiUsageRecordSchema = z.object({
+  id: z.string().uuid(),
+  operation: z.string().min(1).max(100),
+  platform: z.enum(['小红书', '抖音']),
+  model: z.string().min(1).max(200),
+  inputTokens: z.number().int().min(0).nullable(),
+  outputTokens: z.number().int().min(0).nullable(),
+  latencyMs: z.number().int().min(0),
+  estimatedCost: z.number().min(0).nullable(),
+  success: z.boolean(),
+  errorMessage: z.string().max(2000),
+  createdAt: z.string(),
+})
 
 export type AiUsageRecord = {
   id: string
@@ -36,6 +51,19 @@ export function createAiUsageRepository(database: AppDatabase) {
       return (database.prepare(`SELECT id,operation,platform,model,input_tokens AS inputTokens,output_tokens AS outputTokens,
         latency_ms AS latencyMs,estimated_cost AS estimatedCost,success,error_message AS errorMessage,created_at AS createdAt
         FROM ai_usage_records ORDER BY created_at DESC LIMIT ?`).all(limit) as Row[]).map(map)
+    },
+    replaceAll(records: AiUsageRecord[]) {
+      database.exec('BEGIN')
+      try {
+        database.prepare('DELETE FROM ai_usage_records').run()
+        for (const record of records) {
+          insert.run(record.id, record.operation, record.platform, record.model, record.inputTokens, record.outputTokens, record.latencyMs, record.estimatedCost, record.success ? 1 : 0, record.errorMessage, record.createdAt)
+        }
+        database.exec('COMMIT')
+      } catch (error) {
+        database.exec('ROLLBACK')
+        throw error
+      }
     },
     summarize(since: string) {
       return database.prepare(`SELECT COUNT(*) AS calls,COALESCE(SUM(success),0) AS successfulCalls,
