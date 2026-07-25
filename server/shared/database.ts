@@ -87,16 +87,34 @@ function migrate(database: AppDatabase) {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS ai_usage_records (
+      id TEXT PRIMARY KEY,
+      operation TEXT NOT NULL,
+      platform TEXT NOT NULL CHECK(platform IN ('小红书','抖音')),
+      model TEXT NOT NULL,
+      input_tokens INTEGER,
+      output_tokens INTEGER,
+      latency_ms INTEGER NOT NULL,
+      estimated_cost REAL,
+      success INTEGER NOT NULL CHECK(success IN (0,1)),
+      error_message TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL
+    );
   `)
   const creationColumns = new Set((database.prepare('PRAGMA table_info(creation_records)').all() as Array<{ name: string }>).map(column => column.name))
   if (!creationColumns.has('source')) database.exec("ALTER TABLE creation_records ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
   if (!creationColumns.has('version_number')) database.exec('ALTER TABLE creation_records ADD COLUMN version_number INTEGER NOT NULL DEFAULT 1')
   if (!creationColumns.has('publish_status')) database.exec("ALTER TABLE creation_records ADD COLUMN publish_status TEXT NOT NULL DEFAULT 'draft'")
   if (!creationColumns.has('published_url')) database.exec("ALTER TABLE creation_records ADD COLUMN published_url TEXT NOT NULL DEFAULT ''")
+  const aiSettingsColumns = new Set((database.prepare('PRAGMA table_info(ai_settings)').all() as Array<{ name: string }>).map(column => column.name))
+  if (!aiSettingsColumns.has('input_price_per_million')) database.exec('ALTER TABLE ai_settings ADD COLUMN input_price_per_million REAL NOT NULL DEFAULT 0')
+  if (!aiSettingsColumns.has('output_price_per_million')) database.exec('ALTER TABLE ai_settings ADD COLUMN output_price_per_million REAL NOT NULL DEFAULT 0')
+  if (!aiSettingsColumns.has('monthly_budget')) database.exec('ALTER TABLE ai_settings ADD COLUMN monthly_budget REAL NOT NULL DEFAULT 0')
   database.exec('CREATE INDEX IF NOT EXISTS creation_records_history_idx ON creation_records(product_name, platform, version_number DESC)')
   database.exec('CREATE INDEX IF NOT EXISTS publishing_tasks_board_idx ON publishing_tasks(status, planned_at)')
   database.exec('CREATE INDEX IF NOT EXISTS performance_records_report_idx ON performance_records(platform, recorded_on DESC)')
   database.exec('CREATE INDEX IF NOT EXISTS creative_tasks_status_idx ON creative_tasks(status, updated_at DESC)')
+  database.exec('CREATE INDEX IF NOT EXISTS ai_usage_created_idx ON ai_usage_records(created_at DESC)')
   database.exec('PRAGMA foreign_keys = ON;')
 }
 

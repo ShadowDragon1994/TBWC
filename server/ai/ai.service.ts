@@ -1,15 +1,18 @@
 import { generatedCandidatesSchema, generatedContentSchema, type AiGenerateInput, type AiSettingsInput } from './ai.schema'
 import type { createAiSettingsRepository } from './ai.repository'
 import type { createSecretService } from './secret.service'
+import type { createAiUsageRepository } from './usage.repository'
 
 type Fetch = typeof fetch
 export class AiConfigurationError extends Error {}
 export class AiUpstreamError extends Error {}
 
-export function createAiService(repository: ReturnType<typeof createAiSettingsRepository>, secrets: ReturnType<typeof createSecretService>, fetchImpl: Fetch) {
+export function createAiService(repository: ReturnType<typeof createAiSettingsRepository>, usageRepository: ReturnType<typeof createAiUsageRepository>, secrets: ReturnType<typeof createSecretService>, fetchImpl: Fetch) {
   const publicSettings = (settings = repository.get()) => ({
     mode: settings?.mode ?? 'mock', baseUrl: settings?.baseUrl ?? 'https://api.openai.com/v1',
-    model: settings?.model ?? 'gpt-4.1-mini', hasApiKey: Boolean(settings?.encryptedApiKey), updatedAt: settings?.updatedAt ?? null,
+    model: settings?.model ?? 'gpt-4.1-mini', hasApiKey: Boolean(settings?.encryptedApiKey),
+    inputPricePerMillion: settings?.inputPricePerMillion ?? 0, outputPricePerMillion: settings?.outputPricePerMillion ?? 0,
+    monthlyBudget: settings?.monthlyBudget ?? 0, updatedAt: settings?.updatedAt ?? null,
   })
   return {
     getSettings: () => publicSettings(),
@@ -17,7 +20,15 @@ export function createAiService(repository: ReturnType<typeof createAiSettingsRe
       const existing = repository.get()
       const encryptedApiKey = input.clearApiKey ? '' : input.apiKey ? secrets.encrypt(input.apiKey) : existing?.encryptedApiKey ?? ''
       if (input.mode === 'real' && !encryptedApiKey) throw new AiConfigurationError('真实生成模式需要填写 API Key')
-      return publicSettings(repository.save({ mode: input.mode, baseUrl: input.baseUrl.replace(/\/$/, ''), model: input.model, encryptedApiKey, updatedAt: new Date().toISOString() }))
+      return publicSettings(repository.save({
+        mode: input.mode, baseUrl: input.baseUrl.replace(/\/$/, ''), model: input.model, encryptedApiKey,
+        inputPricePerMillion: input.inputPricePerMillion, outputPricePerMillion: input.outputPricePerMillion,
+        monthlyBudget: input.monthlyBudget, updatedAt: new Date().toISOString(),
+      }))
+    },
+    getUsage() {
+      const month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())
+      return { summary: { ...usageRepository.summarize(`${month}-01T00:00:00+08:00`), monthlyBudget: repository.get()?.monthlyBudget ?? 0 }, records: usageRepository.list() }
     },
     async testConnection() {
       const settings = repository.get()
@@ -38,6 +49,7 @@ export function createAiService(repository: ReturnType<typeof createAiSettingsRe
       if (!settings || settings.mode !== 'real' || !settings.encryptedApiKey) throw new AiConfigurationError('请先在设置中启用真实 AI 并填写 API Key')
       const controller = new AbortController()
       const timeout = setTimeout(() => controller.abort(), 45_000)
+      const startedAt = Date.now()
       try {
         const response = await fetchImpl(`${settings.baseUrl}/chat/completions`, {
           method: 'POST', signal: controller.signal,
@@ -51,16 +63,26 @@ export function createAiService(repository: ReturnType<typeof createAiSettingsRe
           }),
         })
         if (!response.ok) throw new AiUpstreamError(`AI 服务返回 ${response.status}`)
-        const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> }
+        const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } }
         const raw = payload.choices?.[0]?.message?.content?.replace(/^```json\s*|\s*```$/g, '')
         if (!raw) throw new AiUpstreamError('AI 服务未返回内容')
         const parsed = JSON.parse(raw)
         const candidates = ('candidates' in parsed ? generatedCandidatesSchema.parse(parsed).candidates : [generatedContentSchema.parse(parsed)]).slice(0, input.operation === 'generate' ? input.count : 1)
-        return { ...candidates[0], candidates, source: 'ai' as const }
+        const inputTokens = Number.isInteger(payload.usage?.prompt_tokens) ? payload.usage!.prompt_tokens! : null
+        const outputTokens = Number.isInteger(payload.usage?.completion_tokens) ? payload.usage!.completion_tokens! : null
+        const estimatedCost = inputTokens === null || outputTokens === null ? null : inputTokens / 1_000_000 * settings.inputPricePerMillion + outputTokens / 1_000_000 * settings.outputPricePerMillion
+        const usage = usageRepository.create({
+          operation: input.operation, platform: input.platform, model: settings.model, inputTokens, outputTokens,
+          latencyMs: Date.now() - startedAt, estimatedCost, success: true, errorMessage: '',
+        })
+        return { ...candidates[0], candidates, source: 'ai' as const, usage: { model: usage.model, inputTokens, outputTokens, latencyMs: usage.latencyMs, estimatedCost } }
       } catch (error) {
-        if (error instanceof AiUpstreamError) throw error
-        if (error instanceof Error && error.name === 'AbortError') throw new AiUpstreamError('AI 服务请求超时')
-        throw new AiUpstreamError('AI 返回内容格式不正确')
+        const normalized = error instanceof AiUpstreamError ? error : error instanceof Error && error.name === 'AbortError' ? new AiUpstreamError('AI 服务请求超时') : new AiUpstreamError('AI 返回内容格式不正确')
+        usageRepository.create({
+          operation: input.operation, platform: input.platform, model: settings.model, inputTokens: null, outputTokens: null,
+          latencyMs: Date.now() - startedAt, estimatedCost: null, success: false, errorMessage: normalized.message,
+        })
+        throw normalized
       } finally { clearTimeout(timeout) }
     },
   }

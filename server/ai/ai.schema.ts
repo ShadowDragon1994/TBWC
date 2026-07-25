@@ -11,6 +11,9 @@ export const aiSettingsInputSchema = z.object({
   model: z.string().trim().min(1).max(100),
   apiKey: z.string().trim().min(1).max(500).optional(),
   clearApiKey: z.boolean().optional(),
+  inputPricePerMillion: z.number().min(0).max(100000).default(0),
+  outputPricePerMillion: z.number().min(0).max(100000).default(0),
+  monthlyBudget: z.number().min(0).max(1000000).default(0),
 })
 
 export const aiGenerateInputSchema = z.object({

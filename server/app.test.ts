@@ -308,18 +308,36 @@ describe('AI gateway API', () => {
   })
 
   it('generates validated platform copy through the configured compatible API', async () => {
-    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify({ candidates: [
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(JSON.stringify({ usage: { prompt_tokens: 1000, completion_tokens: 500 }, choices: [{ message: { content: JSON.stringify({ candidates: [
       { title: '真实生成标题一', sellingPoints: ['卖点一', '卖点二'], body: '真实生成正文一' },
       { title: '真实生成标题二', sellingPoints: ['卖点三'], body: '真实生成正文二' },
       { title: '真实生成标题三', sellingPoints: ['卖点四'], body: '真实生成正文三' },
     ] }) } }] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     const database = createTestDatabase()
     const app = createApp({ database, uploadDir: 'tmp/test-uploads', encryptionKey: Buffer.alloc(32, 9), fetchImpl })
-    await request(app).put('/api/ai/settings').send({ mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'example-model', apiKey: 'sk-test' }).expect(200)
+    await request(app).put('/api/ai/settings').send({ mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'example-model', apiKey: 'sk-test', inputPricePerMillion: 2, outputPricePerMillion: 8, monthlyBudget: 10 }).expect(200)
     const generated = await request(app).post('/api/ai/generate').send({ platform: '小红书', product: { name: '青瓷杯', category: '茶具', price: 89, material: '陶瓷', audience: '喜欢喝茶的人', scene: '书桌', sellingPoints: '釉色温润', forbiddenTerms: '' }, guidance: '语气自然', count: 3, operation: 'generate' }).expect(200)
     expect(generated.body.data).toMatchObject({ title: '真实生成标题一', body: '真实生成正文一', source: 'ai' })
     expect(generated.body.data.candidates).toHaveLength(3)
+    expect(generated.body.data.usage).toMatchObject({ model: 'example-model', inputTokens: 1000, outputTokens: 500, estimatedCost: 0.006 })
     expect(fetchImpl).toHaveBeenCalledWith('https://api.example.com/v1/chat/completions', expect.objectContaining({ method: 'POST' }))
+    await request(app).get('/api/ai/usage').expect(200).expect(response => {
+      expect(response.body.data.summary).toMatchObject({ calls: 1, successfulCalls: 1, inputTokens: 1000, outputTokens: 500, estimatedCost: 0.006, monthlyBudget: 10 })
+      expect(response.body.data.records[0]).toMatchObject({ platform: '小红书', operation: 'generate', success: true })
+    })
+    database.close()
+  })
+
+  it('records failed real AI calls without exposing request content', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('upstream failed', { status: 503 }))
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads', encryptionKey: Buffer.alloc(32, 5), fetchImpl })
+    await request(app).put('/api/ai/settings').send({ mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'example-model', apiKey: 'sk-test' }).expect(200)
+    await request(app).post('/api/ai/generate').send({ platform: '抖音', product: { name: '木梳', category: '日用', price: 29 }, guidance: '', count: 1, operation: 'generate' }).expect(502)
+    await request(app).get('/api/ai/usage').expect(200).expect(response => {
+      expect(response.body.data.records[0]).toMatchObject({ platform: '抖音', success: false, errorMessage: 'AI 服务返回 503' })
+      expect(JSON.stringify(response.body)).not.toContain('木梳')
+    })
     database.close()
   })
 

@@ -17,6 +17,7 @@ import { createCreationRecordService, CreationRecordNotFoundError } from './crea
 import { createAiSettingsRepository } from './ai/ai.repository'
 import { aiGenerateInputSchema, aiSettingsInputSchema } from './ai/ai.schema'
 import { createAiService, AiConfigurationError, AiUpstreamError } from './ai/ai.service'
+import { createAiUsageRepository } from './ai/usage.repository'
 import { createSecretService } from './ai/secret.service'
 import { createPublishingTaskRepository } from './publishing-tasks/publishing-task.repository'
 import { publishingTaskInputSchema, publishingTaskQuerySchema } from './publishing-tasks/publishing-task.schema'
@@ -35,7 +36,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   const assetRepository = createAssetRepository(database)
   const creationRecordRepository = createCreationRecordRepository(database)
   const creationRecordService = createCreationRecordService(creationRecordRepository)
-  const aiService = createAiService(createAiSettingsRepository(database), createSecretService(encryptionKey), fetchImpl)
+  const aiService = createAiService(createAiSettingsRepository(database), createAiUsageRepository(database), createSecretService(encryptionKey), fetchImpl)
   const publishingTaskRepository = createPublishingTaskRepository(database)
   const publishingTaskService = createPublishingTaskService(publishingTaskRepository)
   const performanceRecordRepository = createPerformanceRecordRepository(database)
@@ -115,6 +116,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   app.put('/api/performance-records/:id', (request, response) => response.json({ data: performanceRecordService.update(String(request.params.id), performanceRecordInputSchema.parse(request.body)) }))
   app.delete('/api/performance-records/:id', (request, response) => { performanceRecordService.remove(String(request.params.id)); response.status(204).end() })
   app.get('/api/ai/settings', (_request, response) => response.json({ data: aiService.getSettings() }))
+  app.get('/api/ai/usage', (_request, response) => response.json({ data: aiService.getUsage() }))
   app.put('/api/ai/settings', (request, response) => response.json({ data: aiService.saveSettings(aiSettingsInputSchema.parse(request.body)) }))
   app.post('/api/ai/test', async (_request, response, next) => {
     try { response.json({ data: await aiService.testConnection() }) } catch (error) { next(error) }
