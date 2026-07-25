@@ -24,6 +24,9 @@ import { createPublishingTaskService, PublishingTaskNotFoundError } from './publ
 import { createPerformanceRecordRepository } from './performance-records/performance-record.repository'
 import { performanceRecordImportSchema, performanceRecordInputSchema, performanceRecordQuerySchema } from './performance-records/performance-record.schema'
 import { createPerformanceRecordService, PerformanceRecordNotFoundError } from './performance-records/performance-record.service'
+import { createCreativeTaskRepository } from './creative-tasks/creative-task.repository'
+import { creativeTaskInputSchema, creativeTaskQuerySchema } from './creative-tasks/creative-task.schema'
+import { createCreativeTaskService, CreativeTaskNotFoundError, InvalidCreativeTaskTransitionError } from './creative-tasks/creative-task.service'
 
 export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
@@ -37,6 +40,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   const publishingTaskService = createPublishingTaskService(publishingTaskRepository)
   const performanceRecordRepository = createPerformanceRecordRepository(database)
   const performanceRecordService = createPerformanceRecordService(performanceRecordRepository)
+  const creativeTaskService = createCreativeTaskService(createCreativeTaskRepository(database))
   const upload = multer({
     storage: multer.diskStorage({ destination: uploadDir, filename: (_request, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -98,6 +102,10 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   app.post('/api/publishing-tasks', (request, response) => response.status(201).json({ data: publishingTaskService.create(publishingTaskInputSchema.parse(request.body)) }))
   app.put('/api/publishing-tasks/:id', (request, response) => response.json({ data: publishingTaskService.update(String(request.params.id), publishingTaskInputSchema.parse(request.body)) }))
   app.delete('/api/publishing-tasks/:id', (request, response) => { publishingTaskService.remove(String(request.params.id)); response.status(204).end() })
+  app.get('/api/creative-tasks', (request, response) => response.json({ data: creativeTaskService.list(creativeTaskQuerySchema.parse(request.query)) }))
+  app.get('/api/creative-tasks/:id', (request, response) => response.json({ data: creativeTaskService.find(String(request.params.id)) }))
+  app.post('/api/creative-tasks', (request, response) => response.status(201).json({ data: creativeTaskService.create(creativeTaskInputSchema.parse(request.body)) }))
+  app.put('/api/creative-tasks/:id', (request, response) => response.json({ data: creativeTaskService.update(String(request.params.id), creativeTaskInputSchema.parse(request.body)) }))
   app.get('/api/performance-records', (request, response) => response.json({ data: performanceRecordService.list(performanceRecordQuerySchema.parse(request.query)) }))
   app.post('/api/performance-records', (request, response) => response.status(201).json({ data: performanceRecordService.create(performanceRecordInputSchema.parse(request.body)) }))
   app.post('/api/performance-records/import', (request, response) => response.json({ data: performanceRecordService.importMany(performanceRecordImportSchema.parse(request.body).records) }))
@@ -123,6 +131,8 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
     if (error instanceof CreationRecordNotFoundError) return response.status(404).json({ code: 'NOT_FOUND', message: error.message })
     if (error instanceof PublishingTaskNotFoundError) return response.status(404).json({ code: 'NOT_FOUND', message: error.message })
     if (error instanceof PerformanceRecordNotFoundError) return response.status(404).json({ code: 'NOT_FOUND', message: error.message })
+    if (error instanceof CreativeTaskNotFoundError) return response.status(404).json({ code: 'NOT_FOUND', message: error.message })
+    if (error instanceof InvalidCreativeTaskTransitionError) return response.status(409).json({ code: 'INVALID_TASK_TRANSITION', message: error.message })
     if (error instanceof AiConfigurationError) return response.status(422).json({ code: 'AI_CONFIGURATION_ERROR', message: error.message })
     if (error instanceof AiUpstreamError) return response.status(502).json({ code: 'AI_UPSTREAM_ERROR', message: error.message })
     if (error instanceof multer.MulterError) return response.status(422).json({ code: 'UPLOAD_ERROR', message: error.code === 'LIMIT_FILE_SIZE' ? '图片不能超过 10MB' : '图片上传失败' })

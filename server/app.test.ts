@@ -6,6 +6,47 @@ import request from 'supertest'
 import { createApp } from './app'
 import { createTestDatabase } from './shared/database'
 
+describe('creative task API', () => {
+  it('creates, resumes and advances a persisted creative task', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    const input = {
+      productId: null,
+      productName: '青瓷杯',
+      platform: '小红书',
+      title: '雨后青瓷',
+      sellingPoints: ['釉色自然', '日常茶饮'],
+      body: '一只适合日常使用的青瓷杯。',
+      status: 'draft',
+      failureReason: '',
+    }
+    const created = await request(app).post('/api/creative-tasks').send(input).expect(201)
+
+    await request(app).get('/api/creative-tasks?status=draft').expect(200).expect(response => {
+      expect(response.body.data).toHaveLength(1)
+      expect(response.body.data[0]).toMatchObject({ id: created.body.data.id, productName: '青瓷杯' })
+    })
+    await request(app).get(`/api/creative-tasks/${created.body.data.id}`).expect(200)
+    await request(app).put(`/api/creative-tasks/${created.body.data.id}`).send({
+      ...input,
+      status: 'editing',
+      title: '雨后青瓷｜日常茶席',
+    }).expect(200).expect(response => {
+      expect(response.body.data).toMatchObject({ status: 'editing', title: '雨后青瓷｜日常茶席' })
+    })
+    database.close()
+  })
+
+  it('rejects invalid creative task state transitions', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    const input = { productId: null, productName: '木梳', platform: '抖音', title: '木梳', sellingPoints: [], body: '正文', status: 'draft', failureReason: '' }
+    const created = await request(app).post('/api/creative-tasks').send(input).expect(201)
+    await request(app).put(`/api/creative-tasks/${created.body.data.id}`).send({ ...input, status: 'completed' }).expect(409)
+    database.close()
+  })
+})
+
 describe('production frontend hosting', () => {
   it('serves the built app for browser routes while preserving API 404 responses', async () => {
     const frontendDir = mkdtempSync(join(tmpdir(), 'zaowutai-frontend-'))
