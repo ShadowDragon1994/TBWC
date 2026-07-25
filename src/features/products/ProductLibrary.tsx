@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Copy, Download, ImagePlus, PackagePlus, Pencil, Plus, Save, Search, Trash2, Upload } from 'lucide-react'
 import { productsApi, type ProductDraft, type ProductRecord } from './products.api'
 import fallbackImage from '../../assets/bookmark-gift.png'
@@ -15,10 +15,10 @@ export function ProductLibrary({ onUse }: { onUse: (product: ProductRecord) => v
   const [message, setMessage] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try { setProducts((await productsApi.list()).data) } catch (error) { setMessage(error instanceof Error ? error.message : '加载失败') }
-  }
-  useEffect(() => { void load() }, [])
+  }, [])
+  useEffect(() => { void load() }, [load])
 
   const edit = (product?: ProductRecord) => {
     setDialogOpen(true)
@@ -28,7 +28,8 @@ export function ProductLibrary({ onUse }: { onUse: (product: ProductRecord) => v
   const save = async () => {
     setBusy(true)
     try {
-      editing ? await productsApi.update(editing.id, draft) : await productsApi.create(draft)
+      if (editing) await productsApi.update(editing.id, draft)
+      else await productsApi.create(draft)
       setMessage(editing ? '商品修改已保存' : '商品已保存到本机')
       setEditing(null); setDraft(emptyDraft); setDialogOpen(false); await load()
     } catch (error) { setMessage(error instanceof Error ? error.message : '保存失败') } finally { setBusy(false) }

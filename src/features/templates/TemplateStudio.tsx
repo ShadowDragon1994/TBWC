@@ -18,7 +18,7 @@ export function TemplateStudio({ defaultTitle, onNotice }: { defaultTitle: strin
   const [imageUrl, setImageUrl] = useState(productImage)
   const [layout, setLayout] = useState(() => readCoverLayout('小红书', 0))
   const assets = useMemo(() => products.flatMap(product => (product.assets ?? []).map(asset => ({ ...asset, productName: product.name, url: `/uploads/${asset.storedName}` }))), [products])
-  useEffect(() => { productsApi.list().then(response => { setProducts(response.data); setSelectedProductId(response.data[0]?.id ?? '') }).catch(error => onNotice(error instanceof Error ? error.message : '素材加载失败')) }, [])
+  useEffect(() => { productsApi.list().then(response => { setProducts(response.data); setSelectedProductId(response.data[0]?.id ?? '') }).catch(error => onNotice(error instanceof Error ? error.message : '素材加载失败')) }, [onNotice])
   const save = () => { localStorage.setItem(brandPresetKey, JSON.stringify(preset)); onNotice('品牌预设已保存在本机') }
   const changeLayout = (change: Partial<CoverLayout>) => { const next = { ...layout, ...change }; setLayout(next); saveCoverLayout(platform, template, next) }
   const selectPlatform = (next: ContentPlatform) => { setPlatform(next); setLayout(readCoverLayout(next, template)) }
