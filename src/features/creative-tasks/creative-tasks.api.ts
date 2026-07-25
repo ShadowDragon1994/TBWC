@@ -13,6 +13,8 @@ export type CreativeTaskDraft = {
 }
 export type CreativeTask = CreativeTaskDraft & { id: string; createdAt: string; updatedAt: string }
 
+export const isClosedCreativeTask = (status: CreativeTaskStatus) => status === 'exporting' || status === 'completed'
+
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, options)
   if (!response.ok) {
@@ -33,4 +35,3 @@ export const creativeTasksApi = {
   create: (draft: CreativeTaskDraft) => api<{ data: CreativeTask }>('/api/creative-tasks', json('POST', draft)),
   update: (id: string, draft: CreativeTaskDraft) => api<{ data: CreativeTask }>(`/api/creative-tasks/${id}`, json('PUT', draft)),
 }
-

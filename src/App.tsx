@@ -14,8 +14,9 @@ import { TemplateStudio } from './features/templates/TemplateStudio'
 import { PublishingBoard } from './features/publishing-tasks/PublishingBoard'
 import { AnalyticsDashboard } from './features/analytics/AnalyticsDashboard'
 import { StrategyPage } from './features/strategy/StrategyPage'
-import { creativeTasksApi, type CreativeTaskStatus } from './features/creative-tasks/creative-tasks.api'
-import { applyComplianceDecision, runCompliance, type ComplianceStatus } from './features/compliance/compliance'
+import { creativeTasksApi, isClosedCreativeTask, type CreativeTaskStatus } from './features/creative-tasks/creative-tasks.api'
+import { applyComplianceDecision, canExport, runCompliance, type ComplianceStatus } from './features/compliance/compliance'
+import { downloadExportBundle } from './features/export/export-bundle'
 
 const nav = [[Home, '今日工作台'], [Box, '商品库'], [Archive, '创作记录'], [CalendarDays, '发布任务'], [BarChart3, '数据复盘'], [Lightbulb, '策略建议'], [Image, '模板与素材'], [Settings, '设置']] as const
 const exportOptions = ['主图 800×800', '详情页长图 750px', '竖版海报 3:4']
@@ -126,16 +127,49 @@ export function App() {
     } catch (error) { setNotice(error instanceof Error ? error.message : '局部改写失败') } finally { setGenerating(false) }
   }
 
-  const exportBundle = () => {
-    const copy = `${content.title}\n\n${content.sellingPoints.map((point, index) => `${index + 1}. ${point}`).join('\n')}\n\n${content.body}\n\n商品：${currentProduct.name}`
-    const url = URL.createObjectURL(new Blob([copy], { type: 'text/plain;charset=utf-8' }))
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = '东方花窗书签礼盒-文案.txt'
-    anchor.click()
-    URL.revokeObjectURL(url)
-    setExported(true)
-    setNotice(`${selectedExport}文案包已导出`)
+  const exportBundle = async () => {
+    if (!canExport(complianceFindings)) return setNotice('请先处理全部合规阻断项和确认项')
+    setGenerating(true)
+    const taskDraft = (status: CreativeTaskStatus, failureReason = '') => ({
+      productId: currentProduct.id === mockProduct.id ? null : currentProduct.id,
+      productName: currentProduct.name,
+      platform,
+      title: content.title,
+      sellingPoints: content.sellingPoints,
+      body: content.body,
+      status,
+      failureReason,
+    })
+    let taskId = creativeTaskId
+    let status = creativeTaskStatus
+    try {
+      if (!taskId) {
+        const created = await creativeTasksApi.create(taskDraft('draft'))
+        taskId = created.data.id
+        status = created.data.status
+      }
+      const advance = async (next: CreativeTaskStatus) => {
+        const updated = await creativeTasksApi.update(taskId!, taskDraft(next))
+        status = updated.data.status
+        setCreativeTaskStatus(status)
+      }
+      if (status === 'failed') await advance('editing')
+      if (status === 'draft') await advance('editing')
+      if (status === 'editing') await advance('checking')
+      if (status === 'checking') await advance('confirming')
+      if (status === 'confirming') await advance('exporting')
+      const imageUrl = 'assets' in currentProduct && currentProduct.assets?.[0]?.storedName ? `/uploads/${currentProduct.assets[0].storedName}` : productImage
+      await downloadExportBundle({ productName: currentProduct.name, platform, title: content.title, sellingPoints: content.sellingPoints, body: content.body, imageUrl, findings: complianceFindings })
+      await advance('completed')
+      setCreativeTaskId(taskId)
+      setExported(true)
+      setNotice('多尺寸 PNG、文案和合规报告已打包导出')
+    } catch (error) {
+      if (taskId && status !== 'completed') {
+        try { await creativeTasksApi.update(taskId, taskDraft('failed', error instanceof Error ? error.message : '导出失败')); setCreativeTaskStatus('failed') } catch { /* preserve original export error */ }
+      }
+      setNotice(error instanceof Error ? error.message : '素材包导出失败')
+    } finally { setGenerating(false) }
   }
 
   const saveCreation = async () => {
@@ -152,7 +186,7 @@ export function App() {
       }
       const saved = await creationRecordsApi.create(draft)
       const taskDraft = { ...draft, status: 'editing' as const, failureReason: '' }
-      const task = creativeTaskId
+      const task = creativeTaskId && !isClosedCreativeTask(creativeTaskStatus)
         ? await creativeTasksApi.update(creativeTaskId, taskDraft)
         : await creativeTasksApi.create(taskDraft)
       setEditingRecordId(saved.data.id)
@@ -198,7 +232,7 @@ export function App() {
       {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name, platform)); setEditingRecordId(null); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : selectedNav === '创作记录' ? <CreationRecords onContinue={(record: CreationRecord) => { const recordPlatform: ContentPlatform = record.platform === '抖音' ? '抖音' : '小红书'; setCurrentProduct({ ...mockProduct, id: record.productId ?? mockProduct.id, name: record.productName }); setPlatform(recordPlatform); setContent({ platform: recordPlatform, title: record.title, sellingPoints: record.sellingPoints, body: record.body, status: '待编辑' }); setEditingRecordId(null); setSelectedNav('今日工作台'); setNotice(`已恢复历史版本 V${record.versionNumber ?? 1}，保存时会创建新版本`) }}/> : selectedNav === '发布任务' ? <PublishingBoard onNotice={setNotice}/> : selectedNav === '数据复盘' ? <AnalyticsDashboard onNotice={setNotice}/> : selectedNav === '策略建议' ? <StrategyPage onNotice={setNotice}/> : selectedNav === '模板与素材' ? <TemplateStudio defaultTitle={content.title} onNotice={setNotice}/> : selectedNav === '设置' ? <AiSettingsPage onSaved={settings => setAiSettings(settings)}/> : <>
       <section className="page-head">
         <div><h1>{currentProduct.name}创作任务</h1><div className="steps"><span className="done"><Check/>选择商品</span><i/><span className="current">2</span><b>生成内容</b><i/><span>3</span><b>审核调整</b><i/><span>4</span><b>导出完成</b></div></div>
-        <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '内容生成中' : exported ? '已导出' : creativeTaskStatus === 'draft' ? '草稿' : '待编辑'}</em></div><button className="secondary" onClick={() => void resumeCreativeTask()}><RefreshCw size={18}/>继续未完成任务</button><button className="primary" onClick={() => void generate()} disabled={generating}><Sparkles size={18}/>{generating ? '正在生成…' : '生成内容'}</button><button className="secondary" onClick={() => void saveCreation()} disabled={saving}><Save size={18}/>{saving ? '保存中…' : '保存创作'}</button><button className="secondary" onClick={exportBundle}><Download size={18}/>导出素材包</button></div>
+        <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '处理中' : exported ? '已导出' : creativeTaskStatus === 'draft' ? '草稿' : creativeTaskStatus === 'failed' ? '导出失败' : '待编辑'}</em></div><button className="secondary" onClick={() => void resumeCreativeTask()}><RefreshCw size={18}/>继续未完成任务</button><button className="primary" onClick={() => void generate()} disabled={generating}><Sparkles size={18}/>{generating ? '正在处理…' : '生成内容'}</button><button className="secondary" onClick={() => void saveCreation()} disabled={saving}><Save size={18}/>{saving ? '保存中…' : '保存创作'}</button><button className="secondary" onClick={() => void exportBundle()} disabled={generating || !canExport(complianceFindings)}><Download size={18}/>导出素材包</button></div>
       </section>
 
       <section className="workspace">

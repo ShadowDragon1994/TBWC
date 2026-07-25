@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { creativeTasksApi, type CreativeTask } from './creative-tasks.api'
+import { creativeTasksApi, isClosedCreativeTask, type CreativeTask } from './creative-tasks.api'
 
 describe('creativeTasksApi', () => {
   afterEach(() => vi.unstubAllGlobals())
@@ -18,5 +18,11 @@ describe('creativeTasksApi', () => {
 
     expect(fetchMock).toHaveBeenNthCalledWith(2, '/api/creative-tasks', undefined)
     expect(fetchMock).toHaveBeenNthCalledWith(3, '/api/creative-tasks/task-1', expect.objectContaining({ method: 'PUT' }))
+  })
+
+  it('starts a new task when the previous task is exporting or completed', () => {
+    expect(isClosedCreativeTask('exporting')).toBe(true)
+    expect(isClosedCreativeTask('completed')).toBe(true)
+    expect(isClosedCreativeTask('editing')).toBe(false)
   })
 })

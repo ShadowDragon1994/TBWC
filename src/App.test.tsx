@@ -153,6 +153,15 @@ describe('App interactions', () => {
     expect(screen.queryByText('尚未记录图片与字体授权凭证')).not.toBeInTheDocument()
   })
 
+  it('keeps ZIP export blocked until all compliance confirmations are handled', async () => {
+    render(<App />)
+    const exportButton = screen.getByRole('button', { name: '导出素材包' })
+    expect(exportButton).toBeDisabled()
+    for (const button of screen.getAllByRole('button', { name: '确认继续' })) await userEvent.click(button)
+    await userEvent.click(screen.getByRole('checkbox', { name: '已核对图片与字体授权凭证' }))
+    expect(exportButton).toBeEnabled()
+  })
+
   it('continues editing a saved Douyin record in the workbench', async () => {
     const record = { id: 'r1', productId: null, productName: '青瓷杯', platform: '抖音', title: '历史标题', sellingPoints: ['历史卖点'], body: '历史口播正文', createdAt: '2026-07-18T00:00:00.000Z', updatedAt: '2026-07-18T00:00:00.000Z' }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [record] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
