@@ -335,9 +335,53 @@ describe('AI gateway API', () => {
     await request(app).put('/api/ai/settings').send({ mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'example-model', apiKey: 'sk-test' }).expect(200)
     await request(app).post('/api/ai/generate').send({ platform: '抖音', product: { name: '木梳', category: '日用', price: 29 }, guidance: '', count: 1, operation: 'generate' }).expect(502)
     await request(app).get('/api/ai/usage').expect(200).expect(response => {
-      expect(response.body.data.records[0]).toMatchObject({ platform: '抖音', success: false, errorMessage: 'AI 服务返回 503' })
+      expect(response.body.data.summary.calls).toBe(1)
+      expect(response.body.data.records[0]).toMatchObject({ platform: '抖音', success: false, errorMessage: 'AI 服务暂时不可用（503），请稍后重试' })
       expect(JSON.stringify(response.body)).not.toContain('木梳')
     })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    database.close()
+  })
+
+  it('retries one transient rate-limit response and then succeeds', async () => {
+    const payload = { choices: [{ message: { content: JSON.stringify({ candidates: [{ title: '重试成功', sellingPoints: ['稳定'], body: '正文' }] }) } }] }
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(new Response('rate limited', { status: 429 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads', encryptionKey: Buffer.alloc(32, 6), fetchImpl })
+    await request(app).put('/api/ai/settings').send({ mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'example-model', apiKey: 'sk-test' }).expect(200)
+    await request(app).post('/api/ai/generate').send({ platform: '小红书', product: { name: '茶杯', category: '茶具', price: 89 }, guidance: '', count: 1, operation: 'generate' }).expect(200).expect(response => {
+      expect(response.body.data.title).toBe('重试成功')
+    })
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    database.close()
+  })
+
+  it.each([
+    [401, 'AI 鉴权失败，请检查 API Key'],
+    [402, 'AI 服务余额不足，请充值后重试'],
+  ])('returns an actionable message for upstream status %s without retrying', async (status, message) => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('failed', { status }))
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads', encryptionKey: Buffer.alloc(32, 4), fetchImpl })
+    await request(app).put('/api/ai/settings').send({ mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'example-model', apiKey: 'sk-test' }).expect(200)
+    await request(app).post('/api/ai/generate').send({ platform: '抖音', product: { name: '木梳', category: '日用', price: 29 }, guidance: '', count: 1, operation: 'generate' }).expect(502).expect(response => {
+      expect(response.body.message).toBe(message)
+    })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    database.close()
+  })
+
+  it('does not retry an invalid successful response', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(new Response('{invalid json', { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads', encryptionKey: Buffer.alloc(32, 8), fetchImpl })
+    await request(app).put('/api/ai/settings').send({ mode: 'real', baseUrl: 'https://api.example.com/v1', model: 'example-model', apiKey: 'sk-test' }).expect(200)
+    await request(app).post('/api/ai/generate').send({ platform: '小红书', product: { name: '茶杯', category: '茶具', price: 89 }, guidance: '', count: 1, operation: 'generate' }).expect(502).expect(response => {
+      expect(response.body.message).toBe('AI 返回内容格式不正确')
+    })
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
     database.close()
   })
 

@@ -7,6 +7,15 @@ type Fetch = typeof fetch
 export class AiConfigurationError extends Error {}
 export class AiUpstreamError extends Error {}
 
+const retryableStatuses = new Set([429, 502, 503, 504])
+const upstreamMessage = (status: number) => {
+  if (status === 401 || status === 403) return 'AI 鉴权失败，请检查 API Key'
+  if (status === 402) return 'AI 服务余额不足，请充值后重试'
+  if (status === 429) return 'AI 服务请求过于频繁，请稍后重试'
+  if (status >= 500) return `AI 服务暂时不可用（${status}），请稍后重试`
+  return `AI 服务返回 ${status}`
+}
+
 export function createAiService(repository: ReturnType<typeof createAiSettingsRepository>, usageRepository: ReturnType<typeof createAiUsageRepository>, secrets: ReturnType<typeof createSecretService>, fetchImpl: Fetch) {
   const publicSettings = (settings = repository.get()) => ({
     mode: settings?.mode ?? 'mock', baseUrl: settings?.baseUrl ?? 'https://api.openai.com/v1',
@@ -51,7 +60,7 @@ export function createAiService(repository: ReturnType<typeof createAiSettingsRe
       const timeout = setTimeout(() => controller.abort(), 45_000)
       const startedAt = Date.now()
       try {
-        const response = await fetchImpl(`${settings.baseUrl}/chat/completions`, {
+        const request: RequestInit = {
           method: 'POST', signal: controller.signal,
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secrets.decrypt(settings.encryptedApiKey)}` },
           body: JSON.stringify({
@@ -61,8 +70,10 @@ export function createAiService(repository: ReturnType<typeof createAiSettingsRe
               { role: 'user', content: JSON.stringify({ task: input.operation === 'generate' ? `为${input.platform}创作${input.count}个差异明显的中文电商内容候选` : `只改写${input.operation === 'rewrite_title' ? '标题' : input.operation === 'rewrite_selling_points' ? '卖点' : '正文'}，其他字段保持原样，返回1个候选`, platformRules: input.platform === '小红书' ? '生活化笔记，正文自然分段，末尾含3到5个相关话题标签' : '60秒内口播脚本，包含开场、展示、卖点和行动引导，不使用夸大承诺', product: input.product, currentContent: input.currentContent, guidance: input.guidance, candidateCount: input.operation === 'generate' ? input.count : 1 }) },
             ],
           }),
-        })
-        if (!response.ok) throw new AiUpstreamError(`AI 服务返回 ${response.status}`)
+        }
+        let response = await fetchImpl(`${settings.baseUrl}/chat/completions`, request)
+        if (!response.ok && retryableStatuses.has(response.status)) response = await fetchImpl(`${settings.baseUrl}/chat/completions`, request)
+        if (!response.ok) throw new AiUpstreamError(upstreamMessage(response.status))
         const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }>; usage?: { prompt_tokens?: number; completion_tokens?: number } }
         const raw = payload.choices?.[0]?.message?.content?.replace(/^```json\s*|\s*```$/g, '')
         if (!raw) throw new AiUpstreamError('AI 服务未返回内容')
