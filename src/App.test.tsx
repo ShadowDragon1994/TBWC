@@ -75,6 +75,24 @@ describe('App interactions', () => {
     expect(screen.getByText('平台表现对比')).toBeInTheDocument()
   })
 
+  it('previews and imports a valid performance CSV batch', async () => {
+    const imported = { id: 'csv-record', publishingTaskId: null, productName: 'CSV商品', platform: '抖音', title: 'CSV导入作品', recordedOn: '2026-07-25', impressions: 1000, views: 800, likes: 60, favorites: 30, comments: 8, shares: 5, leads: 3, orders: 2, revenue: 199, createdAt: '', updatedAt: '' }
+    const fetchMock = vi.fn().mockImplementation((input: string, options?: RequestInit) => {
+      if (input === '/api/performance-records/import' && options?.method === 'POST') return Promise.resolve(new Response(JSON.stringify({ data: { created: 1, skipped: 0, records: [imported] } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '数据复盘' }))
+    await userEvent.click(await screen.findByRole('button', { name: '导入 CSV' }))
+    const csv = '平台,商品名称,作品标题,统计日期,曝光量,播放阅读,点赞,收藏,评论,分享,线索,订单,成交额\n抖音,CSV商品,CSV导入作品,2026-07-25,1000,800,60,30,8,5,3,2,199'
+    await userEvent.upload(screen.getByLabelText('选择 CSV 文件'), new File([csv], 'douyin.csv', { type: 'text/csv' }))
+    expect(await screen.findByText('共 1 条，显示前 5 条')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: '确认导入 1 条' }))
+    expect(await screen.findByText('CSV导入作品')).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith('/api/performance-records/import', expect.objectContaining({ method: 'POST' }))
+  })
+
   it('opens evidence-based strategy recommendations', async () => {
     const fetchMock = vi.fn().mockImplementation((input: string, options?: RequestInit) => {
       if (input === '/api/publishing-tasks' && options?.method === 'POST') {

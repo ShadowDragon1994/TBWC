@@ -22,7 +22,7 @@ import { createPublishingTaskRepository } from './publishing-tasks/publishing-ta
 import { publishingTaskInputSchema, publishingTaskQuerySchema } from './publishing-tasks/publishing-task.schema'
 import { createPublishingTaskService, PublishingTaskNotFoundError } from './publishing-tasks/publishing-task.service'
 import { createPerformanceRecordRepository } from './performance-records/performance-record.repository'
-import { performanceRecordInputSchema, performanceRecordQuerySchema } from './performance-records/performance-record.schema'
+import { performanceRecordImportSchema, performanceRecordInputSchema, performanceRecordQuerySchema } from './performance-records/performance-record.schema'
 import { createPerformanceRecordService, PerformanceRecordNotFoundError } from './performance-records/performance-record.service'
 
 export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch }) {
@@ -100,6 +100,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   app.delete('/api/publishing-tasks/:id', (request, response) => { publishingTaskService.remove(String(request.params.id)); response.status(204).end() })
   app.get('/api/performance-records', (request, response) => response.json({ data: performanceRecordService.list(performanceRecordQuerySchema.parse(request.query)) }))
   app.post('/api/performance-records', (request, response) => response.status(201).json({ data: performanceRecordService.create(performanceRecordInputSchema.parse(request.body)) }))
+  app.post('/api/performance-records/import', (request, response) => response.json({ data: performanceRecordService.importMany(performanceRecordImportSchema.parse(request.body).records) }))
   app.put('/api/performance-records/:id', (request, response) => response.json({ data: performanceRecordService.update(String(request.params.id), performanceRecordInputSchema.parse(request.body)) }))
   app.delete('/api/performance-records/:id', (request, response) => { performanceRecordService.remove(String(request.params.id)); response.status(204).end() })
   app.get('/api/ai/settings', (_request, response) => response.json({ data: aiService.getSettings() }))

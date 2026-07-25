@@ -90,6 +90,29 @@ describe('performance record API', () => {
     await request(app).post('/api/performance-records').send({ publishingTaskId: null, productName: '木梳', platform: '抖音', title: '木梳视频', recordedOn: '2026-07-22', impressions: -1, views: 0, likes: 0, favorites: 0, comments: 0, shares: 0, leads: 0, orders: 0, revenue: 0 }).expect(422)
     database.close()
   })
+
+  it('imports a validated batch atomically and skips duplicate platform-title-date keys', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    const record = { publishingTaskId: null, productName: '青瓷杯', platform: '小红书', title: '批量导入作品', recordedOn: '2026-07-25', impressions: 12000, views: 8000, likes: 620, favorites: 310, comments: 48, shares: 32, leads: 20, orders: 6, revenue: 588 }
+
+    await request(app).post('/api/performance-records/import').send({ records: [record, record] }).expect(200).expect(response => {
+      expect(response.body.data).toMatchObject({ created: 1, skipped: 1 })
+      expect(response.body.data.records).toHaveLength(1)
+    })
+    await request(app).post('/api/performance-records/import').send({ records: [record] }).expect(200).expect(response => {
+      expect(response.body.data).toMatchObject({ created: 0, skipped: 1 })
+    })
+    database.close()
+  })
+
+  it('rejects CSV import batches over 1000 records', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    const record = { publishingTaskId: null, productName: '商品', platform: '抖音', title: '作品', recordedOn: '2026-07-25', impressions: 0, views: 0, likes: 0, favorites: 0, comments: 0, shares: 0, leads: 0, orders: 0, revenue: 0 }
+    await request(app).post('/api/performance-records/import').send({ records: Array.from({ length: 1001 }, () => record) }).expect(422)
+    database.close()
+  })
 })
 
 describe('product API', () => {

@@ -8,6 +8,7 @@ export const performanceRecordInputSchema = z.object({
   comments: count, shares: count, leads: count, orders: count, revenue: z.number().min(0).max(1_000_000_000),
 })
 export const performanceRecordQuerySchema = z.object({ platform: z.enum(['小红书', '抖音']).or(z.literal('')).default(''), productName: z.string().trim().max(100).default('') })
+export const performanceRecordImportSchema = z.object({ records: z.array(performanceRecordInputSchema).min(1).max(1000) })
 export type PerformanceRecordInput = z.infer<typeof performanceRecordInputSchema>
 export type PerformanceRecord = PerformanceRecordInput & { id: string; createdAt: string; updatedAt: string }
 export const performanceRecordSchema = performanceRecordInputSchema.and(z.object({ id: z.string().uuid(), createdAt: z.string(), updatedAt: z.string() }))
