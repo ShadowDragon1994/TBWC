@@ -200,6 +200,10 @@ describe('product API', () => {
       productId: created.body.data.id, productName: '完整备份商品', platform: '通用',
       title: '需要一起备份的文案', sellingPoints: ['卖点一'], body: '',
     }).expect(201)
+    const savedTask = await request(app).post('/api/creative-tasks').send({
+      productId: created.body.data.id, productName: '完整备份商品', platform: '小红书',
+      title: '需要一起备份的创作任务', sellingPoints: ['卖点一'], body: '正文', status: 'draft', failureReason: '',
+    }).expect(201)
 
     const archive = await request(app)
       .get('/api/backup/archive')
@@ -214,6 +218,9 @@ describe('product API', () => {
 
     await request(app).delete(`/api/products/${created.body.data.id}`).expect(204)
     await request(app).delete(`/api/creation-records/${savedCreation.body.data.id}`).expect(204)
+    await request(app).put(`/api/creative-tasks/${savedTask.body.data.id}`).send({
+      ...savedTask.body.data, productId: null, title: '备份后被修改的标题',
+    }).expect(200)
     rmSync(join(uploadDir, uploaded.body.data.storedName))
     await request(app).post('/api/backup/archive').attach('backup', archive.body, 'backup.zip').expect(200)
 
@@ -222,6 +229,7 @@ describe('product API', () => {
     expect(restored.body.data[0].assets).toHaveLength(1)
     expect(existsSync(join(uploadDir, restored.body.data[0].assets[0].storedName))).toBe(true)
     await request(app).get('/api/creation-records').expect(200).expect(response => expect(response.body.data[0].title).toBe('需要一起备份的文案'))
+    await request(app).get('/api/creative-tasks').expect(200).expect(response => expect(response.body.data[0].title).toBe('需要一起备份的创作任务'))
     database.close()
     rmSync(uploadDir, { recursive: true, force: true })
   })

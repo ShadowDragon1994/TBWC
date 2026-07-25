@@ -40,7 +40,8 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   const publishingTaskService = createPublishingTaskService(publishingTaskRepository)
   const performanceRecordRepository = createPerformanceRecordRepository(database)
   const performanceRecordService = createPerformanceRecordService(performanceRecordRepository)
-  const creativeTaskService = createCreativeTaskService(createCreativeTaskRepository(database))
+  const creativeTaskRepository = createCreativeTaskRepository(database)
+  const creativeTaskService = createCreativeTaskService(creativeTaskRepository)
   const upload = multer({
     storage: multer.diskStorage({ destination: uploadDir, filename: (_request, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -59,6 +60,8 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
     restorePublishingTasks: (tasks: Parameters<typeof publishingTaskRepository.replaceAll>[0]) => publishingTaskRepository.replaceAll(tasks),
     listPerformanceRecords: () => performanceRecordRepository.list({ platform: '', productName: '' }),
     restorePerformanceRecords: (records: Parameters<typeof performanceRecordRepository.replaceAll>[0]) => performanceRecordRepository.replaceAll(records),
+    listCreativeTasks: () => creativeTaskRepository.list({ status: '', platform: '' }),
+    restoreCreativeTasks: (tasks: Parameters<typeof creativeTaskRepository.replaceAll>[0]) => creativeTaskRepository.replaceAll(tasks),
   }
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))

@@ -23,3 +23,8 @@ export type CreativeTaskInput = z.infer<typeof creativeTaskInputSchema>
 export type CreativeTaskQuery = z.infer<typeof creativeTaskQuerySchema>
 export type CreativeTask = CreativeTaskInput & { id: string; createdAt: string; updatedAt: string }
 
+export const creativeTaskSchema = creativeTaskInputSchema.and(z.object({
+  id: z.string().uuid(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+}))

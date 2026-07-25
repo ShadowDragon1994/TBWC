@@ -36,6 +36,17 @@ export function createCreativeTaskRepository(database: AppDatabase) {
         .run(task.id, task.productId, task.productName, task.platform, task.title, JSON.stringify(task.sellingPoints), task.body, task.status, task.failureReason, task.createdAt, task.updatedAt)
       return task
     },
+    replaceAll(tasks: CreativeTask[]) {
+      database.exec('BEGIN')
+      try {
+        database.prepare('DELETE FROM creative_tasks').run()
+        tasks.forEach(task => this.save(task))
+        database.exec('COMMIT')
+      } catch (error) {
+        database.exec('ROLLBACK')
+        throw error
+      }
+      return tasks
+    },
   }
 }
-
