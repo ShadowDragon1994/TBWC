@@ -10,4 +10,4 @@
 - [x] 全量 lint、test、build
 - [x] 代码审查
 - [x] 原子提交
-- [ ] 推送 GitHub 功能分支
+- [x] 推送 GitHub 功能分支
