@@ -48,6 +48,15 @@ describe('creative task API', () => {
 })
 
 describe('production frontend hosting', () => {
+  it('identifies the local application in readiness checks', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    await request(app).get('/ready').expect(200).expect(response => {
+      expect(response.body).toEqual({ status: 'ok', database: 'ok', application: 'zaowutai' })
+    })
+    database.close()
+  })
+
   it('serves the built app for browser routes while preserving API 404 responses', async () => {
     const frontendDir = mkdtempSync(join(tmpdir(), 'zaowutai-frontend-'))
     writeFileSync(join(frontendDir, 'index.html'), '<!doctype html><title>造物台生产页</title>')

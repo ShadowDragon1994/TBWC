@@ -72,7 +72,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   app.use(express.json({ limit: '2mb' }))
   app.use('/uploads', express.static(uploadDir, { fallthrough: false, maxAge: '1d' }))
   app.get('/health', (_request, response) => response.json({ status: 'ok' }))
-  app.get('/ready', (_request, response) => response.json({ status: 'ok', database: 'ok' }))
+  app.get('/ready', (_request, response) => response.json({ status: 'ok', database: 'ok', application: 'zaowutai' }))
   app.get('/api/products', (_request, response) => response.json({ data: productService.list().map(product => ({ ...product, assets: assetRepository.list(product.id) })) }))
   app.post('/api/products', (request, response) => response.status(201).json({ data: productService.create(productInputSchema.parse(request.body)) }))
   app.put('/api/products/:id', (request, response) => response.json({ data: productService.update(request.params.id, productInputSchema.parse(request.body)) }))
