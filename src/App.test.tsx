@@ -160,6 +160,23 @@ describe('App interactions', () => {
     expect(screen.getByLabelText('正文脚本')).toHaveValue('自动恢复正文')
   })
 
+  it('saves and resumes a persisted creative task', async () => {
+    const task = { id: 'task-1', productId: null, productName: '青瓷杯', platform: '抖音', title: '已保存标题', sellingPoints: ['已保存卖点'], body: '已保存正文', status: 'editing', failureReason: '', createdAt: '', updatedAt: '' }
+    const fetchMock = vi.fn().mockImplementation((input: string, options?: RequestInit) => {
+      if (input === '/api/creative-tasks' && options?.method === 'POST') return Promise.resolve(new Response(JSON.stringify({ data: task }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+      if (input === '/api/creative-tasks') return Promise.resolve(new Response(JSON.stringify({ data: [task] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify({ data: { id: 'record-1', versionNumber: 1 } }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+
+    await userEvent.click(screen.getByRole('button', { name: '保存创作' }))
+    expect(fetchMock).toHaveBeenCalledWith('/api/creative-tasks', expect.objectContaining({ method: 'POST' }))
+    await userEvent.click(screen.getByRole('button', { name: '继续未完成任务' }))
+    expect(await screen.findByLabelText('生成标题')).toHaveValue('已保存标题')
+    expect(screen.getByLabelText('正文脚本')).toHaveValue('已保存正文')
+  })
+
   it('opens local AI settings from navigation', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: { mode: 'mock', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4.1-mini', hasApiKey: false, updatedAt: null } }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     render(<App />)

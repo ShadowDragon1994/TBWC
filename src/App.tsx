@@ -14,6 +14,7 @@ import { TemplateStudio } from './features/templates/TemplateStudio'
 import { PublishingBoard } from './features/publishing-tasks/PublishingBoard'
 import { AnalyticsDashboard } from './features/analytics/AnalyticsDashboard'
 import { StrategyPage } from './features/strategy/StrategyPage'
+import { creativeTasksApi, type CreativeTaskStatus } from './features/creative-tasks/creative-tasks.api'
 
 const nav = [[Home, '今日工作台'], [Box, '商品库'], [Archive, '创作记录'], [CalendarDays, '发布任务'], [BarChart3, '数据复盘'], [Lightbulb, '策略建议'], [Image, '模板与素材'], [Settings, '设置']] as const
 const exportOptions = ['主图 800×800', '详情页长图 750px', '竖版海报 3:4']
@@ -53,6 +54,8 @@ export function App() {
   const [guidance, setGuidance] = useState('')
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
   const [candidates, setCandidates] = useState<Array<ReturnType<typeof generateMockContent>>>([])
+  const [creativeTaskId, setCreativeTaskId] = useState<string | null>(null)
+  const [creativeTaskStatus, setCreativeTaskStatus] = useState<CreativeTaskStatus>('draft')
   const findings = useMemo(() => checkCompliance(`${content.title} ${content.sellingPoints.join(' ')} ${content.body}`), [content])
   const forbiddenTerms = useMemo(() => ('forbiddenTerms' in currentProduct ? currentProduct.forbiddenTerms ?? '' : '').split(/[，,、\n]/).map(term => term.trim()).filter(Boolean), [currentProduct])
   const quality = useMemo(() => analyzePlatformContent(platform, content.title, content.body, forbiddenTerms), [platform, content, forbiddenTerms])
@@ -142,9 +145,30 @@ export function App() {
         source: 'manual' as const,
       }
       const saved = await creationRecordsApi.create(draft)
+      const taskDraft = { ...draft, status: 'editing' as const, failureReason: '' }
+      const task = creativeTaskId
+        ? await creativeTasksApi.update(creativeTaskId, taskDraft)
+        : await creativeTasksApi.create(taskDraft)
       setEditingRecordId(saved.data.id)
-      setNotice('已保存为新的历史版本')
+      setCreativeTaskId(task.data.id)
+      setCreativeTaskStatus(task.data.status)
+      setNotice('创作任务和历史版本已保存')
     } catch (error) { setNotice(error instanceof Error ? error.message : '保存创作记录失败') } finally { setSaving(false) }
+  }
+
+  const resumeCreativeTask = async () => {
+    try {
+      const tasks = (await creativeTasksApi.listActive()).data
+      const task = tasks.find(item => item.status !== 'completed')
+      if (!task) return setNotice('没有未完成的创作任务')
+      setCurrentProduct({ ...mockProduct, id: task.productId ?? mockProduct.id, name: task.productName })
+      setPlatform(task.platform)
+      setContent({ platform: task.platform, title: task.title, sellingPoints: task.sellingPoints, body: task.body, status: '待编辑' })
+      setCreativeTaskId(task.id)
+      setCreativeTaskStatus(task.status)
+      setSelectedNav('今日工作台')
+      setNotice(`已恢复“${task.productName}”创作任务`)
+    } catch (error) { setNotice(error instanceof Error ? error.message : '恢复创作任务失败') }
   }
 
   const savePublication = async (publishStatus: PublishStatus, publishedUrl = '') => {
@@ -168,7 +192,7 @@ export function App() {
       {selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name, platform)); setEditingRecordId(null); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : selectedNav === '创作记录' ? <CreationRecords onContinue={(record: CreationRecord) => { const recordPlatform: ContentPlatform = record.platform === '抖音' ? '抖音' : '小红书'; setCurrentProduct({ ...mockProduct, id: record.productId ?? mockProduct.id, name: record.productName }); setPlatform(recordPlatform); setContent({ platform: recordPlatform, title: record.title, sellingPoints: record.sellingPoints, body: record.body, status: '待编辑' }); setEditingRecordId(null); setSelectedNav('今日工作台'); setNotice(`已恢复历史版本 V${record.versionNumber ?? 1}，保存时会创建新版本`) }}/> : selectedNav === '发布任务' ? <PublishingBoard onNotice={setNotice}/> : selectedNav === '数据复盘' ? <AnalyticsDashboard onNotice={setNotice}/> : selectedNav === '策略建议' ? <StrategyPage onNotice={setNotice}/> : selectedNav === '模板与素材' ? <TemplateStudio defaultTitle={content.title} onNotice={setNotice}/> : selectedNav === '设置' ? <AiSettingsPage onSaved={settings => setAiSettings(settings)}/> : <>
       <section className="page-head">
         <div><h1>{currentProduct.name}创作任务</h1><div className="steps"><span className="done"><Check/>选择商品</span><i/><span className="current">2</span><b>生成内容</b><i/><span>3</span><b>审核调整</b><i/><span>4</span><b>导出完成</b></div></div>
-        <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '内容生成中' : exported ? '已导出' : '待编辑'}</em></div><button className="primary" onClick={() => void generate()} disabled={generating}><Sparkles size={18}/>{generating ? '正在生成…' : '生成内容'}</button><button className="secondary" onClick={() => void saveCreation()} disabled={saving}><Save size={18}/>{saving ? '保存中…' : '保存创作'}</button><button className="secondary" onClick={exportBundle}><Download size={18}/>导出素材包</button></div>
+        <div className="head-actions"><div className="task-state">任务状态：<em>{generating ? '内容生成中' : exported ? '已导出' : creativeTaskStatus === 'draft' ? '草稿' : '待编辑'}</em></div><button className="secondary" onClick={() => void resumeCreativeTask()}><RefreshCw size={18}/>继续未完成任务</button><button className="primary" onClick={() => void generate()} disabled={generating}><Sparkles size={18}/>{generating ? '正在生成…' : '生成内容'}</button><button className="secondary" onClick={() => void saveCreation()} disabled={saving}><Save size={18}/>{saving ? '保存中…' : '保存创作'}</button><button className="secondary" onClick={exportBundle}><Download size={18}/>导出素材包</button></div>
       </section>
 
       <section className="workspace">
