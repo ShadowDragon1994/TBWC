@@ -28,6 +28,9 @@ import { createPerformanceRecordService, PerformanceRecordNotFoundError } from '
 import { createCreativeTaskRepository } from './creative-tasks/creative-task.repository'
 import { creativeTaskInputSchema, creativeTaskQuerySchema } from './creative-tasks/creative-task.schema'
 import { createCreativeTaskService, CreativeTaskNotFoundError, InvalidCreativeTaskTransitionError } from './creative-tasks/creative-task.service'
+import { automationExecutionInputSchema } from './automation/automation.schema'
+import { createMockAutomationAdapter } from './automation/mock.adapter'
+import { AutomationAdapterNotFoundError, createAutomationService, UnsupportedAutomationCapabilityError } from './automation/automation.service'
 
 export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
@@ -44,6 +47,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   const performanceRecordService = createPerformanceRecordService(performanceRecordRepository)
   const creativeTaskRepository = createCreativeTaskRepository(database)
   const creativeTaskService = createCreativeTaskService(creativeTaskRepository)
+  const automationService = createAutomationService({ adapters: [createMockAutomationAdapter()] })
   const upload = multer({
     storage: multer.diskStorage({ destination: uploadDir, filename: (_request, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -127,6 +131,11 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   app.post('/api/ai/generate', async (request, response, next) => {
     try { response.json({ data: await aiService.generate(aiGenerateInputSchema.parse(request.body)) }) } catch (error) { next(error) }
   })
+  app.get('/api/automation/adapters', (_request, response) => response.json({ data: automationService.listAdapters() }))
+  app.get('/api/automation/executions', (_request, response) => response.json({ data: automationService.listExecutions() }))
+  app.post('/api/automation/executions', async (request, response, next) => {
+    try { response.status(201).json({ data: await automationService.execute(automationExecutionInputSchema.parse(request.body)) }) } catch (error) { next(error) }
+  })
 
   if (frontendDir) {
     app.use(express.static(frontendDir, { index: 'index.html', maxAge: '1h' }))
@@ -143,6 +152,8 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
     if (error instanceof InvalidCreativeTaskTransitionError) return response.status(409).json({ code: 'INVALID_TASK_TRANSITION', message: error.message })
     if (error instanceof AiConfigurationError) return response.status(422).json({ code: 'AI_CONFIGURATION_ERROR', message: error.message })
     if (error instanceof AiUpstreamError) return response.status(502).json({ code: 'AI_UPSTREAM_ERROR', message: error.message })
+    if (error instanceof AutomationAdapterNotFoundError) return response.status(404).json({ code: 'AUTOMATION_ADAPTER_NOT_FOUND', message: error.message })
+    if (error instanceof UnsupportedAutomationCapabilityError) return response.status(422).json({ code: 'UNSUPPORTED_AUTOMATION_CAPABILITY', message: error.message })
     if (error instanceof multer.MulterError) return response.status(422).json({ code: 'UPLOAD_ERROR', message: error.code === 'LIMIT_FILE_SIZE' ? '图片不能超过 10MB' : '图片上传失败' })
     process.stderr.write(`${JSON.stringify({ level: 'error', message: error instanceof Error ? error.message : 'unknown error' })}\n`)
     response.status(500).json({ code: 'INTERNAL_ERROR', message: '服务暂时不可用' })

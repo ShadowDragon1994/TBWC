@@ -6,6 +6,49 @@ import request from 'supertest'
 import { createApp } from './app'
 import { createTestDatabase } from './shared/database'
 
+describe('automation bridge API', () => {
+  it('lists adapter capabilities and executes an auditable simulated Xiaohongshu publish job', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+
+    await request(app).get('/api/automation/adapters').expect(200).expect(response => {
+      expect(response.body.data[0]).toMatchObject({
+        id: 'mock',
+        capabilities: expect.arrayContaining(['xiaohongshu.publish', 'photoshop.bridge']),
+      })
+    })
+
+    const executed = await request(app).post('/api/automation/executions').send({
+      adapterId: 'mock',
+      capability: 'xiaohongshu.publish',
+      payload: { title: '青瓷杯', body: '一只温润的杯子', assets: [] },
+    }).expect(201)
+    expect(executed.body.data).toMatchObject({
+      adapterId: 'mock',
+      capability: 'xiaohongshu.publish',
+      status: 'succeeded',
+      externalUrl: expect.stringMatching(/^https:\/\/www\.xiaohongshu\.com\//),
+    })
+
+    await request(app).get('/api/automation/executions').expect(200).expect(response => {
+      expect(response.body.data).toHaveLength(1)
+      expect(response.body.data[0].id).toBe(executed.body.data.id)
+    })
+    database.close()
+  })
+
+  it('rejects arbitrary automation capabilities', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    await request(app).post('/api/automation/executions').send({
+      adapterId: 'mock',
+      capability: 'shell.delete-files',
+      payload: {},
+    }).expect(422)
+    database.close()
+  })
+})
+
 describe('creative task API', () => {
   it('creates, resumes and advances a persisted creative task', async () => {
     const database = createTestDatabase()
