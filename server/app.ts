@@ -120,6 +120,26 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   app.post('/api/publishing-tasks', (request, response) => response.status(201).json({ data: publishingTaskService.create(publishingTaskInputSchema.parse(request.body)) }))
   app.put('/api/publishing-tasks/:id', (request, response) => response.json({ data: publishingTaskService.update(String(request.params.id), publishingTaskInputSchema.parse(request.body)) }))
   app.delete('/api/publishing-tasks/:id', (request, response) => { publishingTaskService.remove(String(request.params.id)); response.status(204).end() })
+  app.post('/api/publishing-tasks/:id/auto-publish', async (request, response, next) => {
+    try {
+      const task = publishingTaskRepository.find(String(request.params.id))
+      if (!task) throw new PublishingTaskNotFoundError('发布任务不存在')
+      if (task.platform !== '小红书' || task.status !== 'ready') {
+        return response.status(409).json({ code: 'PUBLISHING_TASK_NOT_READY', message: '仅可自动发布状态为“待发布”的小红书任务' })
+      }
+      const execution = await automationService.execute({
+        adapterId: 'mock',
+        capability: 'xiaohongshu.publish',
+        payload: { publishingTaskId: task.id, title: task.title, notes: task.notes },
+      })
+      const publishedTask = publishingTaskService.update(task.id, {
+        productId: task.productId, creationRecordId: task.creationRecordId, productName: task.productName,
+        platform: task.platform, title: task.title, plannedAt: task.plannedAt, notes: task.notes,
+        status: 'published', publishedUrl: execution.externalUrl,
+      })
+      response.status(201).json({ data: { task: publishedTask, execution } })
+    } catch (error) { next(error) }
+  })
   app.get('/api/creative-tasks', (request, response) => response.json({ data: creativeTaskService.list(creativeTaskQuerySchema.parse(request.query)) }))
   app.get('/api/creative-tasks/:id', (request, response) => response.json({ data: creativeTaskService.find(String(request.params.id)) }))
   app.post('/api/creative-tasks', (request, response) => response.status(201).json({ data: creativeTaskService.create(creativeTaskInputSchema.parse(request.body)) }))

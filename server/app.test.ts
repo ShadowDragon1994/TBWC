@@ -224,6 +224,24 @@ describe('publishing task API', () => {
     database.close()
   })
 
+  it('automatically publishes a ready Xiaohongshu task and persists its audit', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    const created = await request(app).post('/api/publishing-tasks').send({
+      productId: null, creationRecordId: null, productName: '青瓷杯', platform: '小红书',
+      title: '自动发布任务', plannedAt: '2026-07-23T02:00:00.000Z',
+      notes: '发布正文', status: 'ready', publishedUrl: '',
+    }).expect(201)
+
+    const published = await request(app).post(`/api/publishing-tasks/${created.body.data.id}/auto-publish`).expect(201)
+    expect(published.body.data.task).toMatchObject({ status: 'published' })
+    expect(published.body.data.task.publishedUrl).toMatch(/^https:\/\/www\.xiaohongshu\.com/)
+    await request(app).get('/api/automation/executions').expect(200).expect(response => {
+      expect(response.body.data[0]).toMatchObject({ capability: 'xiaohongshu.publish', status: 'succeeded' })
+    })
+    database.close()
+  })
+
   it('requires an HTTPS work URL when a task is published', async () => {
     const database = createTestDatabase()
     const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
