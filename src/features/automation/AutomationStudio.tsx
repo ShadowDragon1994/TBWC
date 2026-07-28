@@ -1,0 +1,11 @@
+import { useEffect,useState } from 'react'
+import { Octagon,Play,RotateCcw } from 'lucide-react'
+import './automation-studio.css'
+async function call(path:string,method='GET',body?:unknown){const r=await fetch(path,{method,headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined});if(!r.ok)throw new Error((await r.json().catch(()=>({}))).message||'自动化操作失败');return r.json()}
+export function AutomationStudio({onNotice}:{onNotice:(message:string)=>void}){
+ const [stopped,setStopped]=useState<boolean|null>(null),[result,setResult]=useState(''),[busy,setBusy]=useState(false)
+ useEffect(()=>{void call('/api/automation/control').then(r=>setStopped(r.data.emergencyStopped)).catch(e=>onNotice(e.message))},[onNotice])
+ const control=async(value:boolean)=>{const r=await call('/api/automation/control','PUT',{emergencyStopped:value});setStopped(r.data.emergencyStopped);onNotice(value?'所有自动化动作已紧急停止':'自动化动作已恢复')}
+ const execute=async()=>{setBusy(true);setResult('');try{await call('/api/automation/executions','POST',{adapterId:'mock',capability:'photoshop.bridge',payload:{input:'当前商品主图',steps:['主体抠图','背景合成','文字排版','RGB转CMYK副本'],outputs:['800x800 主图','750px 详情长图','3:4 竖版海报','分层 PSD']}});setResult('桥接任务已完成')}catch(e){onNotice(e instanceof Error?e.message:'执行失败')}finally{setBusy(false)}}
+ return <section className="automation-page"><header><div><p>外部工具桥接</p><h1>Photoshop 与自动化治理</h1><span>当前完成 CLI/RPA/MCP 桥接协议；真实 Photoshop 动作由后续适配器实现。</span></div><em>模拟执行器</em></header><div className="control-bar"><b>自动化总开关</b><span className={stopped?'stopped':'running'}>{stopped?'已紧急停止':'运行中'}</span>{stopped?<button onClick={()=>void control(false)}><RotateCcw/>恢复自动化</button>:<button className="danger" onClick={()=>void control(true)}><Octagon/>紧急停止</button>}</div><div className="bridge-grid"><article><h2>输入与动作</h2><p>输入：当前商品主图、品牌字体白名单、文案与版式配置</p><ol><li>主体抠图与边缘处理</li><li>场景背景合成和局部重绘占位</li><li>品牌字体与文字排版</li><li>保留 RGB 并生成 CMYK 印刷副本</li></ol><button className="primary" aria-label="执行 PS 桥接" disabled={busy||stopped!==false} onClick={()=>void execute()}><Play/>执行 PS 桥接</button></article><article><h2>输出清单</h2><ul><li>800×800 小红书商品主图</li><li>750px 宽详情长图</li><li>3:4 竖版海报</li><li>可编辑分层 PSD</li><li>动作日志和失败原因</li></ul>{result&&<strong>{result}</strong>}</article></div></section>
+}

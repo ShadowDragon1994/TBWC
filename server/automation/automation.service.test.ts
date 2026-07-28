@@ -71,4 +71,14 @@ describe('automation service', () => {
       errorMessage: '浏览器未登录',
     })
   })
+
+  it('blocks every external action while emergency stop is active', async () => {
+    const service = createAutomationService({ adapters: [{ id: 'mock', name: '模拟', capabilities: ['photoshop.bridge'], execute: async () => ({ output: {} }) }] })
+    service.setEmergencyStop(true)
+    expect(service.getControlState()).toEqual({ emergencyStopped: true })
+    await expect(service.execute({ adapterId: 'mock', capability: 'photoshop.bridge', payload: {} })).rejects.toThrow('紧急停止')
+    expect(service.listExecutions()).toEqual([])
+    service.setEmergencyStop(false)
+    await expect(service.execute({ adapterId: 'mock', capability: 'photoshop.bridge', payload: {} })).resolves.toMatchObject({ status: 'succeeded' })
+  })
 })

@@ -30,7 +30,7 @@ import { creativeTaskInputSchema, creativeTaskQuerySchema } from './creative-tas
 import { createCreativeTaskService, CreativeTaskNotFoundError, InvalidCreativeTaskTransitionError } from './creative-tasks/creative-task.service'
 import { automationExecutionInputSchema } from './automation/automation.schema'
 import { createMockAutomationAdapter } from './automation/mock.adapter'
-import { AutomationAdapterNotFoundError, createAutomationService, UnsupportedAutomationCapabilityError } from './automation/automation.service'
+import { AutomationAdapterNotFoundError, AutomationEmergencyStoppedError, createAutomationService, UnsupportedAutomationCapabilityError } from './automation/automation.service'
 import { analyzeOpportunities } from './opportunities/opportunity.service'
 import { mockXiaohongshuTrends } from './opportunities/mock-trends'
 import { customerIntentInputSchema } from './customer-service/intent.schema'
@@ -139,6 +139,8 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   })
   app.get('/api/automation/adapters', (_request, response) => response.json({ data: automationService.listAdapters() }))
   app.get('/api/automation/executions', (_request, response) => response.json({ data: automationService.listExecutions() }))
+  app.get('/api/automation/control', (_request, response) => response.json({ data: automationService.getControlState() }))
+  app.put('/api/automation/control', (request, response) => response.json({ data: automationService.setEmergencyStop(request.body?.emergencyStopped === true) }))
   app.post('/api/automation/executions', async (request, response, next) => {
     try { response.status(201).json({ data: await automationService.execute(automationExecutionInputSchema.parse(request.body)) }) } catch (error) { next(error) }
   })
@@ -179,6 +181,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
     if (error instanceof AiUpstreamError) return response.status(502).json({ code: 'AI_UPSTREAM_ERROR', message: error.message })
     if (error instanceof AutomationAdapterNotFoundError) return response.status(404).json({ code: 'AUTOMATION_ADAPTER_NOT_FOUND', message: error.message })
     if (error instanceof UnsupportedAutomationCapabilityError) return response.status(422).json({ code: 'UNSUPPORTED_AUTOMATION_CAPABILITY', message: error.message })
+    if (error instanceof AutomationEmergencyStoppedError) return response.status(423).json({ code: 'AUTOMATION_EMERGENCY_STOPPED', message: error.message })
     if (error instanceof multer.MulterError) return response.status(422).json({ code: 'UPLOAD_ERROR', message: error.code === 'LIMIT_FILE_SIZE' ? '图片不能超过 10MB' : '图片上传失败' })
     process.stderr.write(`${JSON.stringify({ level: 'error', message: error instanceof Error ? error.message : 'unknown error' })}\n`)
     response.status(500).json({ code: 'INTERNAL_ERROR', message: '服务暂时不可用' })

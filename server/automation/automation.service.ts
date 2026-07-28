@@ -39,11 +39,15 @@ export type AutomationExecution = {
 
 export class AutomationAdapterNotFoundError extends Error {}
 export class UnsupportedAutomationCapabilityError extends Error {}
+export class AutomationEmergencyStoppedError extends Error {}
 
 export function createAutomationService({ adapters }: { adapters: AutomationAdapter[] }) {
   const executions: AutomationExecution[] = []
+  let emergencyStopped = false
 
   return {
+    getControlState() { return { emergencyStopped } },
+    setEmergencyStop(value: boolean) { emergencyStopped = value; return { emergencyStopped } },
     listAdapters() {
       return adapters.map(({ id, name, capabilities }) => ({ id, name, capabilities }))
     },
@@ -51,6 +55,7 @@ export function createAutomationService({ adapters }: { adapters: AutomationAdap
       return [...executions]
     },
     async execute(input: { adapterId: string; capability: AutomationCapability; payload: Record<string, unknown> }) {
+      if (emergencyStopped) throw new AutomationEmergencyStoppedError('自动化已紧急停止，请恢复后再执行')
       const adapter = adapters.find(item => item.id === input.adapterId)
       if (!adapter) throw new AutomationAdapterNotFoundError(`自动化适配器不存在：${input.adapterId}`)
       if (!adapter.capabilities.includes(input.capability)) {
@@ -97,4 +102,3 @@ export function createAutomationService({ adapters }: { adapters: AutomationAdap
     },
   }
 }
-

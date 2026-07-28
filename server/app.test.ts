@@ -114,6 +114,16 @@ describe('automation bridge API', () => {
     }).expect(422)
     database.close()
   })
+
+  it('blocks execution after emergency stop and resumes explicitly', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    await request(app).put('/api/automation/control').send({ emergencyStopped: true }).expect(200)
+    await request(app).post('/api/automation/executions').send({ adapterId: 'mock', capability: 'photoshop.bridge', payload: {} }).expect(423)
+    await request(app).put('/api/automation/control').send({ emergencyStopped: false }).expect(200)
+    await request(app).post('/api/automation/executions').send({ adapterId: 'mock', capability: 'photoshop.bridge', payload: {} }).expect(201)
+    database.close()
+  })
 })
 
 describe('creative task API', () => {
