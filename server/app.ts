@@ -36,6 +36,7 @@ import { mockXiaohongshuTrends } from './opportunities/mock-trends'
 import { customerIntentInputSchema } from './customer-service/intent.schema'
 import { analyzeCustomerIntent, buildServiceReply } from './customer-service/intent.service'
 import { buildFestivalPlan, calculateMape, festivalSeeds } from './festivals/festival.service'
+import { analyzeInventory, detectCompetitorChanges, mockCompetitors, mockInventory } from './inventory/inventory.service'
 
 export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
@@ -154,6 +155,11 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
     data: buildFestivalPlan(new Date(), festivalSeeds),
     backtest: { mape: calculateMape([{ predicted: 10200, actual: 11000 }, { predicted: 15400, actual: 14500 }, { predicted: 8800, actual: 9200 }]), samples: 3 },
     meta: { source: 'mock', simulated: true, method: '历史基线 × 节日提升系数', generatedAt: new Date().toISOString() },
+  }))
+  app.get('/api/inventory-intelligence', (_request, response) => response.json({
+    inventory: analyzeInventory(mockInventory),
+    competitors: detectCompetitorChanges(mockCompetitors),
+    meta: { source: 'mock', simulated: true, collectedAt: new Date().toISOString() },
   }))
 
   if (frontendDir) {

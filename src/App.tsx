@@ -21,8 +21,9 @@ import { downloadExportBundle } from './features/export/export-bundle'
 import { OpportunityPage } from './features/opportunities/OpportunityPage'
 import { CustomerServicePage } from './features/customer-service/CustomerServicePage'
 import { FestivalPage } from './features/festivals/FestivalPage'
+import { InventoryPage } from './features/inventory/InventoryPage'
 
-const nav = [[Home, '今日工作台'], [Radar, '趋势选品'], [MessagesSquare, '客服助手'], [CalendarDays, '节日运营'], [Box, '商品库'], [Archive, '创作记录'], [CalendarDays, '发布任务'], [BarChart3, '数据复盘'], [Lightbulb, '策略建议'], [Image, '模板与素材'], [Settings, '设置']] as const
+const nav = [[Home, '今日工作台'], [Radar, '趋势选品'], [MessagesSquare, '客服助手'], [CalendarDays, '节日运营'], [BarChart3, '经营监控'], [Box, '商品库'], [Archive, '创作记录'], [CalendarDays, '发布任务'], [BarChart3, '数据复盘'], [Lightbulb, '策略建议'], [Image, '模板与素材'], [Settings, '设置']] as const
 const exportOptions = ['主图 800×800', '详情页长图 750px', '竖版海报 3:4']
 const localDraftKey = 'zaowutai.creation-draft'
 
@@ -243,10 +244,11 @@ export function App() {
       <div className="side-note">个人模式<br/><small>数据保存在本机</small></div>
     </aside>
 
-    <main className={selectedNav === '客服助手' ? 'customer-active' : selectedNav === '节日运营' ? 'festival-active' : ''}>
+    <main className={selectedNav === '客服助手' ? 'customer-active' : selectedNav === '节日运营' ? 'festival-active' : selectedNav === '经营监控' ? 'inventory-active' : ''}>
       <header className="topbar"><div/><button onClick={() => setNotice('可直接编辑文案；生成与导出目前使用模拟数据')}><CircleHelp size={17}/>使用帮助</button><span className="avatar">山</span></header>
       {selectedNav === '客服助手' && <CustomerServicePage onNotice={setNotice}/>}
       {selectedNav === '节日运营' && <FestivalPage onNotice={setNotice}/>}
+      {selectedNav === '经营监控' && <InventoryPage onNotice={setNotice}/>}
       {selectedNav === '趋势选品' ? <OpportunityPage onNotice={setNotice} onCreateBrief={brief => { setCurrentProduct({ ...mockProduct, name: brief.keyword, sellingPoints: brief.contentAngles.join('；'), scene: brief.positioning }); setPlatform('小红书'); setContent({ platform: '小红书', title: brief.titleDirection, sellingPoints: brief.contentAngles, body: `${brief.positioning}\n\n视觉方向：${brief.visualDirection}`, status: '待编辑' }); setSelectedNav('今日工作台') }}/> : selectedNav === '商品库' ? <ProductLibrary onUse={product => { setCurrentProduct(product); setContent(generateMockContent(product.id, 0, product.name, platform)); setEditingRecordId(null); setVariant(0); setSelectedNav('今日工作台'); setNotice(`已选择“${product.name}”用于创作`) }}/> : selectedNav === '创作记录' ? <CreationRecords onContinue={(record: CreationRecord) => { const recordPlatform: ContentPlatform = record.platform === '抖音' ? '抖音' : '小红书'; setCurrentProduct({ ...mockProduct, id: record.productId ?? mockProduct.id, name: record.productName }); setPlatform(recordPlatform); setContent({ platform: recordPlatform, title: record.title, sellingPoints: record.sellingPoints, body: record.body, status: '待编辑' }); setEditingRecordId(null); setSelectedNav('今日工作台'); setNotice(`已恢复历史版本 V${record.versionNumber ?? 1}，保存时会创建新版本`) }}/> : selectedNav === '发布任务' ? <PublishingBoard onNotice={setNotice}/> : selectedNav === '数据复盘' ? <AnalyticsDashboard onNotice={setNotice}/> : selectedNav === '策略建议' ? <StrategyPage onNotice={setNotice}/> : selectedNav === '模板与素材' ? <TemplateStudio defaultTitle={content.title} onNotice={setNotice}/> : selectedNav === '设置' ? <AiSettingsPage onSaved={settings => setAiSettings(settings)}/> : <>
       <section className="page-head">
         <div><h1>{currentProduct.name}创作任务</h1><div className="steps"><span className="done"><Check/>选择商品</span><i/><span className="current">2</span><b>生成内容</b><i/><span>3</span><b>审核调整</b><i/><span>4</span><b>导出完成</b></div></div>

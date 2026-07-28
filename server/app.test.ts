@@ -6,6 +6,19 @@ import request from 'supertest'
 import { createApp } from './app'
 import { createTestDatabase } from './shared/database'
 
+describe('inventory and competitor API', () => {
+  it('returns clearance strategies and competitor events from labelled mock data', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    await request(app).get('/api/inventory-intelligence').expect(200).expect(response => {
+      expect(response.body.meta).toMatchObject({ source: 'mock', simulated: true })
+      expect(response.body.inventory).toEqual(expect.arrayContaining([expect.objectContaining({ action: 'clearance', suggestedPrice: expect.any(Number) })]))
+      expect(response.body.competitors).toEqual(expect.arrayContaining([expect.objectContaining({ event: 'new_product' }), expect.objectContaining({ event: 'price_drop' })]))
+    })
+    database.close()
+  })
+})
+
 describe('festival planning API', () => {
   it('returns source-labelled forecasts, reminder milestones and backtest error', async () => {
     const database = createTestDatabase()
