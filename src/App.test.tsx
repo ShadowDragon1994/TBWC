@@ -66,6 +66,24 @@ describe('App interactions', () => {
     expect(fetchMock).toHaveBeenCalledWith(`/api/publishing-tasks/${task.id}`, expect.objectContaining({ method: 'PUT' }))
   })
 
+  it('automatically publishes a ready Xiaohongshu task from the publishing board', async () => {
+    const task = { id: '11111111-1111-4111-8111-111111111111', productId: null, creationRecordId: null, productName: '青瓷杯', platform: '小红书', title: '七夕青瓷笔记', plannedAt: '2026-07-23T02:00:00.000Z', notes: '', status: 'ready', publishedUrl: '', actualPublishedAt: null, createdAt: '', updatedAt: '' }
+    const published = { ...task, status: 'published', publishedUrl: 'https://www.xiaohongshu.com/explore/mock-note' }
+    const fetchMock = vi.fn().mockImplementation((input: string, options?: RequestInit) => {
+      if (input === `/api/publishing-tasks/${task.id}/auto-publish` && options?.method === 'POST') {
+        return Promise.resolve(new Response(JSON.stringify({ data: { task: published, execution: { id: 'run-1', status: 'succeeded', externalUrl: published.publishedUrl } } }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: input.startsWith('/api/publishing-tasks') ? [task] : [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '发布任务' }))
+    await userEvent.click(await screen.findByRole('button', { name: '自动发布到小红书' }))
+
+    expect(await screen.findByRole('link', { name: '打开作品' })).toHaveAttribute('href', published.publishedUrl)
+    expect(fetchMock).toHaveBeenCalledWith(`/api/publishing-tasks/${task.id}/auto-publish`, { method: 'POST' })
+  })
+
   it('opens the analytics dashboard with clearly labelled demo data', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
     render(<App />)
