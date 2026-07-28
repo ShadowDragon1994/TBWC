@@ -28,5 +28,8 @@ describe('Xiaohongshu opportunity analysis', () => {
     expect(() => analyzeOpportunities([
       { keyword: '异常数据', searchHeat: -1, noteCount: 0, growthRate: 0, engagementRate: 0, competitorCount: 0 },
     ])).toThrow('趋势数据无效')
+    expect(() => analyzeOpportunities([
+      { keyword: '非数值数据', searchHeat: Number.NaN, noteCount: 0, growthRate: 0, engagementRate: 0, competitorCount: 0 },
+    ])).toThrow('趋势数据无效')
   })
 })

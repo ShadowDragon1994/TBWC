@@ -25,7 +25,8 @@ const round = (value: number, digits = 2) => Number(value.toFixed(digits))
 
 export function analyzeOpportunities(metrics: TrendMetric[]): Opportunity[] {
   const results = metrics.map(metric => {
-    if (!metric.keyword.trim() || metric.searchHeat < 0 || metric.noteCount < 0 || metric.competitorCount < 0 || metric.engagementRate < 0) {
+    const values = [metric.searchHeat, metric.noteCount, metric.growthRate, metric.engagementRate, metric.competitorCount]
+    if (!metric.keyword.trim() || values.some(value => !Number.isFinite(value)) || metric.searchHeat < 0 || metric.noteCount < 0 || metric.competitorCount < 0 || metric.engagementRate < 0) {
       throw new Error(`趋势数据无效：${metric.keyword || '未命名关键词'}`)
     }
 
@@ -58,4 +59,3 @@ export function analyzeOpportunities(metrics: TrendMetric[]): Opportunity[] {
   })
   return results.sort((a, b) => b.score - a.score)
 }
-
