@@ -6,6 +6,24 @@ import request from 'supertest'
 import { createApp } from './app'
 import { createTestDatabase } from './shared/database'
 
+describe('festival planning API', () => {
+  it('returns source-labelled forecasts, reminder milestones and backtest error', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    await request(app).get('/api/festivals').expect(200).expect(response => {
+      expect(response.body.meta).toMatchObject({ source: 'mock', simulated: true })
+      expect(response.body.data[0]).toMatchObject({
+        name: expect.any(String),
+        predictedViews: expect.any(Number),
+        predictionInterval: { low: expect.any(Number), high: expect.any(Number) },
+        milestones: expect.any(Array),
+      })
+      expect(response.body.backtest.mape).toBeLessThanOrEqual(20)
+    })
+    database.close()
+  })
+})
+
 describe('customer service assistant API', () => {
   it('analyzes gift intent and returns a bounded suggested reply', async () => {
     const database = createTestDatabase()
