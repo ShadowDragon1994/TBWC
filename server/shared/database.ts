@@ -100,6 +100,18 @@ function migrate(database: AppDatabase) {
       error_message TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS automation_executions (
+      id TEXT PRIMARY KEY, adapter_id TEXT NOT NULL, capability TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('running','succeeded','failed')),
+      external_id TEXT NOT NULL DEFAULT '', external_url TEXT NOT NULL DEFAULT '',
+      output TEXT NOT NULL DEFAULT '{}', error_message TEXT NOT NULL DEFAULT '',
+      started_at TEXT NOT NULL, finished_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS automation_control (
+      id INTEGER PRIMARY KEY CHECK(id = 1),
+      emergency_stopped INTEGER NOT NULL DEFAULT 0 CHECK(emergency_stopped IN (0,1))
+    );
+    INSERT OR IGNORE INTO automation_control(id, emergency_stopped) VALUES(1, 0);
   `)
   const creationColumns = new Set((database.prepare('PRAGMA table_info(creation_records)').all() as Array<{ name: string }>).map(column => column.name))
   if (!creationColumns.has('source')) database.exec("ALTER TABLE creation_records ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
@@ -115,6 +127,7 @@ function migrate(database: AppDatabase) {
   database.exec('CREATE INDEX IF NOT EXISTS performance_records_report_idx ON performance_records(platform, recorded_on DESC)')
   database.exec('CREATE INDEX IF NOT EXISTS creative_tasks_status_idx ON creative_tasks(status, updated_at DESC)')
   database.exec('CREATE INDEX IF NOT EXISTS ai_usage_created_idx ON ai_usage_records(created_at DESC)')
+  database.exec('CREATE INDEX IF NOT EXISTS automation_executions_started_idx ON automation_executions(started_at DESC)')
   database.exec('PRAGMA foreign_keys = ON;')
 }
 

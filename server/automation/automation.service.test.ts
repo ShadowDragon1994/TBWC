@@ -81,4 +81,26 @@ describe('automation service', () => {
     service.setEmergencyStop(false)
     await expect(service.execute({ adapterId: 'mock', capability: 'photoshop.bridge', payload: {} })).resolves.toMatchObject({ status: 'succeeded' })
   })
+
+  it('retries a failed execution as a new auditable execution', async () => {
+    let attempts = 0
+    const service = createAutomationService({
+      adapters: [{
+        id: 'rpa',
+        name: 'RPA',
+        capabilities: ['xiaohongshu.publish'],
+        execute: async () => {
+          attempts += 1
+          if (attempts === 1) throw new Error('浏览器暂不可用')
+          return { output: { published: true } }
+        },
+      }],
+    })
+    await expect(service.execute({ adapterId: 'rpa', capability: 'xiaohongshu.publish', payload: {} })).rejects.toThrow()
+    const failed = service.listExecutions()[0]
+
+    await expect(service.retry(failed.id, { title: '重新发布' })).resolves.toMatchObject({ status: 'succeeded' })
+    expect(service.listExecutions()).toHaveLength(2)
+    expect(service.listExecutions()[1]).toMatchObject({ id: failed.id, status: 'failed' })
+  })
 })

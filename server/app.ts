@@ -30,7 +30,8 @@ import { creativeTaskInputSchema, creativeTaskQuerySchema } from './creative-tas
 import { createCreativeTaskService, CreativeTaskNotFoundError, InvalidCreativeTaskTransitionError } from './creative-tasks/creative-task.service'
 import { automationExecutionInputSchema } from './automation/automation.schema'
 import { createMockAutomationAdapter } from './automation/mock.adapter'
-import { AutomationAdapterNotFoundError, AutomationEmergencyStoppedError, createAutomationService, UnsupportedAutomationCapabilityError } from './automation/automation.service'
+import { AutomationAdapterNotFoundError, AutomationEmergencyStoppedError, AutomationExecutionNotRetryableError, createAutomationService, UnsupportedAutomationCapabilityError } from './automation/automation.service'
+import { createAutomationRepository } from './automation/automation.repository'
 import { analyzeOpportunities } from './opportunities/opportunity.service'
 import { mockXiaohongshuTrends } from './opportunities/mock-trends'
 import { customerIntentInputSchema } from './customer-service/intent.schema'
@@ -53,7 +54,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   const performanceRecordService = createPerformanceRecordService(performanceRecordRepository)
   const creativeTaskRepository = createCreativeTaskRepository(database)
   const creativeTaskService = createCreativeTaskService(creativeTaskRepository)
-  const automationService = createAutomationService({ adapters: [createMockAutomationAdapter()] })
+  const automationService = createAutomationService({ adapters: [createMockAutomationAdapter()], store: createAutomationRepository(database) })
   const upload = multer({
     storage: multer.diskStorage({ destination: uploadDir, filename: (_request, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -144,6 +145,12 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   app.post('/api/automation/executions', async (request, response, next) => {
     try { response.status(201).json({ data: await automationService.execute(automationExecutionInputSchema.parse(request.body)) }) } catch (error) { next(error) }
   })
+  app.post('/api/automation/executions/:id/retry', async (request, response, next) => {
+    try {
+      const input = automationExecutionInputSchema.pick({ payload: true }).parse(request.body)
+      response.status(201).json({ data: await automationService.retry(String(request.params.id), input.payload) })
+    } catch (error) { next(error) }
+  })
   app.get('/api/opportunities', (_request, response) => response.json({
     data: analyzeOpportunities(mockXiaohongshuTrends),
     meta: { platform: '小红书', source: 'mock', simulated: true, collectedAt: new Date().toISOString() },
@@ -182,6 +189,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
     if (error instanceof AutomationAdapterNotFoundError) return response.status(404).json({ code: 'AUTOMATION_ADAPTER_NOT_FOUND', message: error.message })
     if (error instanceof UnsupportedAutomationCapabilityError) return response.status(422).json({ code: 'UNSUPPORTED_AUTOMATION_CAPABILITY', message: error.message })
     if (error instanceof AutomationEmergencyStoppedError) return response.status(423).json({ code: 'AUTOMATION_EMERGENCY_STOPPED', message: error.message })
+    if (error instanceof AutomationExecutionNotRetryableError) return response.status(409).json({ code: 'AUTOMATION_EXECUTION_NOT_RETRYABLE', message: error.message })
     if (error instanceof multer.MulterError) return response.status(422).json({ code: 'UPLOAD_ERROR', message: error.code === 'LIMIT_FILE_SIZE' ? '图片不能超过 10MB' : '图片上传失败' })
     process.stderr.write(`${JSON.stringify({ level: 'error', message: error instanceof Error ? error.message : 'unknown error' })}\n`)
     response.status(500).json({ code: 'INTERNAL_ERROR', message: '服务暂时不可用' })
