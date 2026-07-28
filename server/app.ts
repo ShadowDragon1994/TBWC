@@ -31,6 +31,8 @@ import { createCreativeTaskService, CreativeTaskNotFoundError, InvalidCreativeTa
 import { automationExecutionInputSchema } from './automation/automation.schema'
 import { createMockAutomationAdapter } from './automation/mock.adapter'
 import { AutomationAdapterNotFoundError, createAutomationService, UnsupportedAutomationCapabilityError } from './automation/automation.service'
+import { analyzeOpportunities } from './opportunities/opportunity.service'
+import { mockXiaohongshuTrends } from './opportunities/mock-trends'
 
 export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
@@ -136,6 +138,10 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   app.post('/api/automation/executions', async (request, response, next) => {
     try { response.status(201).json({ data: await automationService.execute(automationExecutionInputSchema.parse(request.body)) }) } catch (error) { next(error) }
   })
+  app.get('/api/opportunities', (_request, response) => response.json({
+    data: analyzeOpportunities(mockXiaohongshuTrends),
+    meta: { platform: '小红书', source: 'mock', simulated: true, collectedAt: new Date().toISOString() },
+  }))
 
   if (frontendDir) {
     app.use(express.static(frontendDir, { index: 'index.html', maxAge: '1h' }))

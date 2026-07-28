@@ -6,6 +6,28 @@ import request from 'supertest'
 import { createApp } from './app'
 import { createTestDatabase } from './shared/database'
 
+describe('Xiaohongshu opportunity API', () => {
+  it('returns explainable blue-ocean scores from the simulated trend source', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    await request(app).get('/api/opportunities').expect(200).expect(response => {
+      expect(response.body.meta).toMatchObject({ platform: '小红书', source: 'mock', simulated: true })
+      expect(response.body.data.length).toBeGreaterThan(0)
+      expect(response.body.data[0]).toMatchObject({
+        keyword: expect.any(String),
+        score: expect.any(Number),
+        scoreBreakdown: {
+          demandSupply: expect.any(Number),
+          growth: expect.any(Number),
+          engagement: expect.any(Number),
+          competition: expect.any(Number),
+        },
+      })
+    })
+    database.close()
+  })
+})
+
 describe('automation bridge API', () => {
   it('lists adapter capabilities and executes an auditable simulated Xiaohongshu publish job', async () => {
     const database = createTestDatabase()
