@@ -33,6 +33,8 @@ import { createMockAutomationAdapter } from './automation/mock.adapter'
 import { AutomationAdapterNotFoundError, createAutomationService, UnsupportedAutomationCapabilityError } from './automation/automation.service'
 import { analyzeOpportunities } from './opportunities/opportunity.service'
 import { mockXiaohongshuTrends } from './opportunities/mock-trends'
+import { customerIntentInputSchema } from './customer-service/intent.schema'
+import { analyzeCustomerIntent, buildServiceReply } from './customer-service/intent.service'
 
 export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
@@ -142,6 +144,11 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
     data: analyzeOpportunities(mockXiaohongshuTrends),
     meta: { platform: '小红书', source: 'mock', simulated: true, collectedAt: new Date().toISOString() },
   }))
+  app.post('/api/customer-service/analyze', (request, response) => {
+    const { message } = customerIntentInputSchema.parse(request.body)
+    const intent = analyzeCustomerIntent(message)
+    response.json({ data: { intent, reply: buildServiceReply(intent) } })
+  })
 
   if (frontendDir) {
     app.use(express.static(frontendDir, { index: 'index.html', maxAge: '1h' }))

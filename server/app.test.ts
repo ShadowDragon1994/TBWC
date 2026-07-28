@@ -6,6 +6,20 @@ import request from 'supertest'
 import { createApp } from './app'
 import { createTestDatabase } from './shared/database'
 
+describe('customer service assistant API', () => {
+  it('analyzes gift intent and returns a bounded suggested reply', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    await request(app).post('/api/customer-service/analyze').send({
+      message: '送给老师，教师节前到北京，预算100以内',
+    }).expect(200).expect(response => {
+      expect(response.body.data.intent).toMatchObject({ purpose: 'gift', recipient: '老师', holiday: '教师节', budgetMax: 100 })
+      expect(response.body.data.reply).toContain('需要根据收货地区和下单时间确认')
+    })
+    database.close()
+  })
+})
+
 describe('Xiaohongshu opportunity API', () => {
   it('returns explainable blue-ocean scores from the simulated trend source', async () => {
     const database = createTestDatabase()
