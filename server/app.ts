@@ -32,6 +32,7 @@ import { automationExecutionInputSchema } from './automation/automation.schema'
 import { createMockAutomationAdapter } from './automation/mock.adapter'
 import { AutomationAdapterNotFoundError, AutomationEmergencyStoppedError, AutomationExecutionNotRetryableError, createAutomationService, UnsupportedAutomationCapabilityError } from './automation/automation.service'
 import { createAutomationRepository } from './automation/automation.repository'
+import { createXiaohongshuMcpAdapter } from './automation/xiaohongshu-mcp.adapter'
 import { analyzeOpportunities } from './opportunities/opportunity.service'
 import { mockXiaohongshuTrends } from './opportunities/mock-trends'
 import { customerIntentInputSchema } from './customer-service/intent.schema'
@@ -39,7 +40,7 @@ import { analyzeCustomerIntent, buildServiceReply } from './customer-service/int
 import { buildFestivalPlan, calculateMape, festivalSeeds } from './festivals/festival.service'
 import { analyzeInventory, detectCompetitorChanges, mockCompetitors, mockInventory } from './inventory/inventory.service'
 
-export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch }) {
+export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch, xiaohongshuMcpUrl = '', xiaohongshuMcpFetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch; xiaohongshuMcpUrl?: string; xiaohongshuMcpFetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
   const app = express()
   const productService = createProductService(createProductRepository(database))
@@ -54,7 +55,11 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   const performanceRecordService = createPerformanceRecordService(performanceRecordRepository)
   const creativeTaskRepository = createCreativeTaskRepository(database)
   const creativeTaskService = createCreativeTaskService(creativeTaskRepository)
-  const automationService = createAutomationService({ adapters: [createMockAutomationAdapter()], store: createAutomationRepository(database) })
+  const automationAdapters = [
+    createMockAutomationAdapter(),
+    ...(xiaohongshuMcpUrl ? [createXiaohongshuMcpAdapter({ url: xiaohongshuMcpUrl, fetchImpl: xiaohongshuMcpFetchImpl })] : []),
+  ]
+  const automationService = createAutomationService({ adapters: automationAdapters, store: createAutomationRepository(database) })
   const upload = multer({
     storage: multer.diskStorage({ destination: uploadDir, filename: (_request, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -127,10 +132,16 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
       if (task.platform !== '小红书' || task.status !== 'ready') {
         return response.status(409).json({ code: 'PUBLISHING_TASK_NOT_READY', message: '仅可自动发布状态为“待发布”的小红书任务' })
       }
+      const images = task.productId
+        ? assetRepository.list(task.productId).map(asset => resolve(uploadDir, asset.storedName))
+        : []
+      if (xiaohongshuMcpUrl && images.length === 0) {
+        return response.status(409).json({ code: 'PUBLISHING_ASSET_REQUIRED', message: '真实小红书发布至少需要一张商品图片' })
+      }
       const execution = await automationService.execute({
-        adapterId: 'mock',
+        adapterId: xiaohongshuMcpUrl ? 'xiaohongshu-mcp' : 'mock',
         capability: 'xiaohongshu.publish',
-        payload: { publishingTaskId: task.id, title: task.title, notes: task.notes },
+        payload: { publishingTaskId: task.id, title: task.title, content: task.notes || task.title, images, products: [task.productName] },
       })
       const publishedTask = publishingTaskService.update(task.id, {
         productId: task.productId, creationRecordId: task.creationRecordId, productName: task.productName,

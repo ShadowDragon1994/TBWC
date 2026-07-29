@@ -13,7 +13,13 @@ const database = createDatabase(resolve(dataDir, 'zaowutai.sqlite'))
 const secretPath = resolve(dataDir, 'ai-secret.key')
 let encryptionKey: Buffer
 try { encryptionKey = readFileSync(secretPath) } catch { encryptionKey = randomBytes(32); writeFileSync(secretPath, encryptionKey, { mode: 0o600 }) }
-const server = createApp({ database, uploadDir: resolve(dataDir, 'uploads'), frontendDir, encryptionKey }).listen(port, '127.0.0.1', () => {
+const server = createApp({
+  database,
+  uploadDir: resolve(dataDir, 'uploads'),
+  frontendDir,
+  encryptionKey,
+  xiaohongshuMcpUrl: process.env.XHS_MCP_URL?.trim(),
+}).listen(port, '127.0.0.1', () => {
   process.stdout.write(`${JSON.stringify({ level: 'info', message: 'server_started', port })}\n`)
   startAutomaticBackup({ backupDir: resolve(process.env.BACKUP_DIR ?? resolve(dataDir, 'backups')), baseUrl: `http://127.0.0.1:${port}` })
 })

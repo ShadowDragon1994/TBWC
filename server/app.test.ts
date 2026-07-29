@@ -242,6 +242,29 @@ describe('publishing task API', () => {
     database.close()
   })
 
+  it('uses the configured Xiaohongshu MCP adapter with local product images and product binding', async () => {
+    const database = createTestDatabase()
+    const mcpFetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: {} } }), { status: 200, headers: { 'Content-Type': 'application/json', 'mcp-session-id': 'session-1' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ jsonrpc: '2.0', id: 2, result: { content: [{ type: 'text', text: '{"feed_id":"real-note-1"}' }] } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads', xiaohongshuMcpUrl: 'http://127.0.0.1:18060/mcp', xiaohongshuMcpFetchImpl: mcpFetch })
+    const product = await request(app).post('/api/products').send({ name: '青瓷杯', category: '文创', price: 99 }).expect(201)
+    await request(app).post(`/api/products/${product.body.data.id}/assets`).attach('image', Buffer.from('image'), { filename: 'cover.png', contentType: 'image/png' }).expect(201)
+    const task = await request(app).post('/api/publishing-tasks').send({
+      productId: product.body.data.id, creationRecordId: null, productName: '青瓷杯', platform: '小红书',
+      title: '真实MCP发布', plannedAt: '2026-08-01T02:00:00.000Z', notes: '正文', status: 'ready', publishedUrl: '',
+    }).expect(201)
+
+    await request(app).post(`/api/publishing-tasks/${task.body.data.id}/auto-publish`).expect(201).expect(response => {
+      expect(response.body.data.task.publishedUrl).toBe('https://www.xiaohongshu.com/explore/real-note-1')
+      expect(response.body.data.execution.adapterId).toBe('xiaohongshu-mcp')
+    })
+    const publishRequest = JSON.parse(String(mcpFetch.mock.calls[2][1]?.body))
+    expect(publishRequest.params.arguments).toMatchObject({ products: ['青瓷杯'], images: [expect.stringMatching(/test-uploads.+\.png$/)] })
+    database.close()
+  })
+
   it('requires an HTTPS work URL when a task is published', async () => {
     const database = createTestDatabase()
     const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
