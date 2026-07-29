@@ -40,6 +40,7 @@ import { customerIntentInputSchema } from './customer-service/intent.schema'
 import { analyzeCustomerIntent, buildServiceReply } from './customer-service/intent.service'
 import { buildFestivalPlan, calculateMape, festivalSeeds } from './festivals/festival.service'
 import { analyzeInventory, detectCompetitorChanges, mockCompetitors, mockInventory } from './inventory/inventory.service'
+import { findMock1688Offer, searchMock1688Offers } from './sourcing/mock-1688'
 
 export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch, xiaohongshuMcpUrl = '', xiaohongshuMcpFetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch; xiaohongshuMcpUrl?: string; xiaohongshuMcpFetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
@@ -91,6 +92,22 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   app.get('/health', (_request, response) => response.json({ status: 'ok' }))
   app.get('/ready', (_request, response) => response.json({ status: 'ok', database: 'ok', application: 'zaowutai' }))
   app.get('/api/products', (_request, response) => response.json({ data: productService.list().map(product => ({ ...product, assets: assetRepository.list(product.id) })) }))
+  app.get('/api/sourcing/1688', (request, response) => {
+    response.json({ data: searchMock1688Offers(String(request.query.q ?? '')), meta: { source: '1688-mock', simulated: true, replaceableAdapter: true } })
+  })
+  app.post('/api/sourcing/1688/:offerId/import', async (request, response, next) => {
+    try {
+      const offer = findMock1688Offer(String(request.params.offerId))
+      if (!offer) return response.status(404).json({ code: 'SOURCING_OFFER_NOT_FOUND', message: '1688模拟货源不存在' })
+      const execution = await automationService.execute({ adapterId: 'mock', capability: 'supply.1688.collect', payload: { offerId: offer.id, supplierUrl: offer.supplierUrl } })
+      const product = productService.create(productInputSchema.parse({
+        name: offer.title, category: offer.category, price: offer.suggestedRetailPrice, cost: offer.wholesalePrice,
+        material: offer.material, size: offer.size, color: offer.color, audience: offer.audience, scene: offer.scene,
+        sellingPoints: offer.sellingPoints, forbiddenTerms: '', supplier: offer.supplier, supplierUrl: offer.supplierUrl,
+      }))
+      response.status(201).json({ data: { product, execution } })
+    } catch (error) { next(error) }
+  })
   app.post('/api/products', (request, response) => response.status(201).json({ data: productService.create(productInputSchema.parse(request.body)) }))
   app.put('/api/products/:id', (request, response) => response.json({ data: productService.update(request.params.id, productInputSchema.parse(request.body)) }))
   app.delete('/api/products/:id', (request, response) => { productService.remove(request.params.id); response.status(204).end() })
@@ -100,6 +117,29 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
     if (!request.file) return response.status(422).json({ code: 'VALIDATION_ERROR', message: '请选择 JPG、PNG 或 WebP 图片' })
     const asset = assetRepository.create({ productId, filename: request.file.originalname, storedName: request.file.filename, mimeType: request.file.mimetype, size: request.file.size })
     response.status(201).json({ data: { ...asset, url: `/uploads/${asset.storedName}` } })
+  })
+  app.post('/api/products/:id/list', async (request, response, next) => {
+    try {
+      const product = productService.find(String(request.params.id))
+      const assets = assetRepository.list(product.id)
+      if (!assets.length) return response.status(409).json({ code: 'LISTING_ASSET_REQUIRED', message: '商品上架至少需要一张商品图片' })
+      if (!product.supplierUrl) return response.status(409).json({ code: 'SUPPLIER_EVIDENCE_REQUIRED', message: '商品上架前需要填写1688供应商链接' })
+      const adapterId = String(request.body?.adapterId ?? 'mock')
+      const platform = String(request.body?.platform ?? 'taobao')
+      if (platform !== 'taobao') return response.status(422).json({ code: 'UNSUPPORTED_LISTING_PLATFORM', message: '当前上架适配器目标为淘宝' })
+      const execution = await automationService.execute({
+        adapterId,
+        capability: 'taobao.product.list',
+        payload: {
+          productId: product.id, title: product.name, category: product.category,
+          price: product.price, cost: product.cost, material: product.material,
+          size: product.size, color: product.color, sellingPoints: product.sellingPoints,
+          supplier: product.supplier, supplierUrl: product.supplierUrl,
+          images: assets.map(asset => resolve(uploadDir, asset.storedName)),
+        },
+      })
+      response.status(201).json({ data: execution })
+    } catch (error) { next(error) }
   })
   app.get('/api/backup', (_request, response) => response.json({ version: 1, exportedAt: new Date().toISOString(), products: productService.list() }))
   app.post('/api/backup', (request, response) => response.json({ data: productService.restore(backupSchema.parse(request.body).products) }))

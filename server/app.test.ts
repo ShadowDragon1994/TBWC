@@ -327,6 +327,37 @@ describe('performance record API', () => {
 })
 
 describe('product API', () => {
+  it('searches and imports a simulated 1688 offer into the product library', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    const offers = await request(app).get('/api/sourcing/1688?q=青瓷').expect(200)
+    expect(offers.body.meta).toMatchObject({ source: '1688-mock', simulated: true, replaceableAdapter: true })
+    expect(offers.body.data).toHaveLength(1)
+    const imported = await request(app).post(`/api/sourcing/1688/${offers.body.data[0].id}/import`).expect(201)
+    expect(imported.body.data.product).toMatchObject({ name: '青瓷茶杯节日礼盒', cost: 35, supplierUrl: 'https://detail.1688.com/offer/mock-celadon.html' })
+    expect(imported.body.data.execution).toMatchObject({ capability: 'supply.1688.collect', status: 'succeeded' })
+    await request(app).get('/api/products').expect(200).expect(response => expect(response.body.data[0].supplier).toContain('1688模拟供应商'))
+    database.close()
+  })
+
+  it('creates an auditable Taobao listing execution from a complete sourced product', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+    const product = await request(app).post('/api/products').send({
+      name: '1688青瓷礼盒', category: '文创礼品', price: 99, cost: 35,
+      supplier: '1688模拟供应商', supplierUrl: 'https://detail.1688.com/offer/mock.html',
+      sellingPoints: '手工青瓷；礼盒包装',
+    }).expect(201)
+    await request(app).post(`/api/products/${product.body.data.id}/assets`)
+      .attach('image', Buffer.from('image'), { filename: 'main.png', contentType: 'image/png' }).expect(201)
+
+    await request(app).post(`/api/products/${product.body.data.id}/list`).send({ adapterId: 'mock', platform: 'taobao' }).expect(201).expect(response => {
+      expect(response.body.data).toMatchObject({ adapterId: 'mock', capability: 'taobao.product.list', status: 'succeeded' })
+      expect(response.body.data.output).toMatchObject({ simulated: true, platform: 'taobao' })
+    })
+    database.close()
+  })
+
   it('creates, lists, updates and deletes a product', async () => {
     const database = createTestDatabase()
     const app = createApp({ database, uploadDir: 'tmp/test-uploads' })

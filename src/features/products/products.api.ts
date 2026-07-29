@@ -6,6 +6,8 @@ export type ProductRecord = {
   assets?: ProductAsset[]; createdAt: string; updatedAt: string
 }
 export type ProductDraft = Omit<ProductRecord, 'id' | 'assets' | 'createdAt' | 'updatedAt'>
+export type ProductListingExecution = { id: string; adapterId: string; capability: 'taobao.product.list'; status: 'running' | 'succeeded' | 'failed'; externalUrl: string }
+export type SourcingOffer = { id: string; title: string; category: string; wholesalePrice: number; suggestedRetailPrice: number; minOrder: number; supplier: string; supplierUrl: string; material: string; size: string; color: string; audience: string; scene: string; sellingPoints: string }
 
 async function api<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(path, options)
@@ -23,6 +25,9 @@ export const productsApi = {
   update: (id: string, draft: ProductDraft) => api<{ data: ProductRecord }>(`/api/products/${id}`, json('PUT', draft)),
   remove: (id: string) => api<void>(`/api/products/${id}`, { method: 'DELETE' }),
   upload: (id: string, file: File) => { const data = new FormData(); data.append('image', file); return api<{ data: ProductAsset & { url: string } }>(`/api/products/${id}/assets`, { method: 'POST', body: data }) },
+  listOnTaobao: (id: string) => api<{ data: ProductListingExecution }>(`/api/products/${id}/list`, json('POST', { adapterId: 'mock', platform: 'taobao' })),
+  sourcing1688: (q = '') => api<{ data: SourcingOffer[]; meta: { source: string; simulated: boolean; replaceableAdapter: boolean } }>(`/api/sourcing/1688?q=${encodeURIComponent(q)}`),
+  import1688: (offerId: string) => api<{ data: { product: ProductRecord; execution: { id: string; status: string } } }>(`/api/sourcing/1688/${offerId}/import`, { method: 'POST' }),
   backup: () => api<Record<string, unknown>>('/api/backup'),
   restore: (backup: unknown) => api<{ data: ProductRecord[] }>('/api/backup', json('POST', backup)),
   backupArchive: async () => {

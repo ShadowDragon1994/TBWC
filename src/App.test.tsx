@@ -12,6 +12,44 @@ describe('App interactions', () => {
     expect(screen.getByRole('heading', { name: '商品库' })).toBeInTheDocument()
   })
 
+  it('imports a selected 1688 simulated offer into the product library', async () => {
+    const offer = { id: 'offer-1', title: '青瓷茶杯节日礼盒', category: '文创礼品', wholesalePrice: 35, suggestedRetailPrice: 99, minOrder: 2, supplier: '1688模拟供应商', supplierUrl: 'https://detail.1688.com/offer/mock.html', material: '陶瓷', size: '礼盒', color: '青釉', audience: '送礼', scene: '春节', sellingPoints: '礼盒即送' }
+    const imported = { id: 'p1', name: offer.title, category: offer.category, price: 99, cost: 35, supplier: offer.supplier, supplierUrl: offer.supplierUrl, assets: [], createdAt: '', updatedAt: '' }
+    let productList: typeof imported[] = []
+    const fetchMock = vi.fn().mockImplementation((input: string, options?: RequestInit) => {
+      if (input === '/api/sourcing/1688?q=' && !options) return Promise.resolve(new Response(JSON.stringify({ data: [offer], meta: { source: '1688-mock', simulated: true, replaceableAdapter: true } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      if (input === '/api/sourcing/1688/offer-1/import' && options?.method === 'POST') {
+        productList = [imported]
+        return Promise.resolve(new Response(JSON.stringify({ data: { product: imported, execution: { id: 'run-1', status: 'succeeded' } } }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: productList }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '商品库' }))
+    await userEvent.click(screen.getByRole('button', { name: '1688模拟货源' }))
+    await userEvent.click(await screen.findByRole('button', { name: '导入商品库' }))
+    expect(await screen.findByRole('status')).toHaveTextContent('已从1688模拟货源导入')
+    expect(await screen.findByRole('heading', { name: offer.title, level: 2 })).toBeInTheDocument()
+  })
+
+  it('submits a product to the auditable Taobao listing adapter', async () => {
+    const product = { id: 'p1', name: '1688青瓷礼盒', category: '文创礼品', price: 99, cost: 35, material: '陶瓷', size: '', color: '', audience: '', scene: '送礼', sellingPoints: '礼盒包装', forbiddenTerms: '', supplier: '1688供应商', supplierUrl: 'https://detail.1688.com/offer/mock.html', assets: [{ id: 'a1', filename: 'main.png', storedName: 'main.png' }], createdAt: '', updatedAt: '' }
+    const fetchMock = vi.fn().mockImplementation((input: string, options?: RequestInit) => {
+      if (input === '/api/products/p1/list' && options?.method === 'POST') {
+        return Promise.resolve(new Response(JSON.stringify({ data: { id: 'run-1', adapterId: 'mock', capability: 'taobao.product.list', status: 'succeeded', externalUrl: 'https://item.taobao.com/item.htm?id=mock' } }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: input === '/api/products' ? [product] : [] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<App />)
+    await userEvent.click(screen.getByRole('button', { name: '商品库' }))
+    await userEvent.click(await screen.findByRole('button', { name: '一键上架淘宝' }))
+
+    expect(await screen.findByRole('status')).toHaveTextContent('淘宝上架任务已提交并写入审计')
+    expect(fetchMock).toHaveBeenCalledWith('/api/products/p1/list', expect.objectContaining({ method: 'POST' }))
+  })
+
   it('opens the cover template studio and saves a local brand preset', async () => {
     const product = { id: 'p1', name: '真实商品', category: '文创', price: 39, assets: [{ id: 'a1', filename: 'real.png', storedName: 'asset.png' }], createdAt: '', updatedAt: '' }
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ data: [product] }), { status: 200, headers: { 'Content-Type': 'application/json' } })))

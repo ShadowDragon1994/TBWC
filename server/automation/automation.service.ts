@@ -5,6 +5,8 @@ export type AutomationCapability =
   | 'xiaohongshu.publish'
   | 'xiaohongshu.customer-service.read'
   | 'xiaohongshu.customer-service.send'
+  | 'supply.1688.collect'
+  | 'taobao.product.list'
   | 'photoshop.bridge'
 
 export type AutomationJob = { id: string; capability: AutomationCapability; payload: Record<string, unknown> }

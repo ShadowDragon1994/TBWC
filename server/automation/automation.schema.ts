@@ -5,6 +5,8 @@ export const automationCapabilitySchema = z.enum([
   'xiaohongshu.publish',
   'xiaohongshu.customer-service.read',
   'xiaohongshu.customer-service.send',
+  'supply.1688.collect',
+  'taobao.product.list',
   'photoshop.bridge',
 ])
 
@@ -13,4 +15,3 @@ export const automationExecutionInputSchema = z.object({
   capability: automationCapabilitySchema,
   payload: z.record(z.string(), z.unknown()).default({}),
 })
-
