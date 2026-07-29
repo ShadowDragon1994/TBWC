@@ -26,7 +26,7 @@ export const opportunitiesApi = {
     if (!response.ok) throw new Error('趋势机会加载失败')
     return response.json() as Promise<{
       data: Opportunity[]
-      meta: { platform: '小红书'; source: string; simulated: boolean; collectedAt: string }
+      meta: { platform: '小红书'; source: string; simulated: boolean; method?: string; collectedAt: string }
     }>
   },
 }
@@ -40,4 +40,3 @@ export function createOpportunityBrief(opportunity: Opportunity): OpportunityBri
     contentAngles: ['真实送礼场景', '工艺与材质细节', '定制过程', '预算与时效说明'],
   }
 }
-

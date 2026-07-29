@@ -35,6 +35,7 @@ import { createAutomationRepository } from './automation/automation.repository'
 import { createXiaohongshuMcpAdapter } from './automation/xiaohongshu-mcp.adapter'
 import { analyzeOpportunities } from './opportunities/opportunity.service'
 import { mockXiaohongshuTrends } from './opportunities/mock-trends'
+import { extractFeeds, mapSearchFeedsToMetric } from './opportunities/live-trend.service'
 import { customerIntentInputSchema } from './customer-service/intent.schema'
 import { analyzeCustomerIntent, buildServiceReply } from './customer-service/intent.service'
 import { buildFestivalPlan, calculateMape, festivalSeeds } from './festivals/festival.service'
@@ -182,10 +183,34 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
       response.status(201).json({ data: await automationService.retry(String(request.params.id), input.payload) })
     } catch (error) { next(error) }
   })
-  app.get('/api/opportunities', (_request, response) => response.json({
-    data: analyzeOpportunities(mockXiaohongshuTrends),
-    meta: { platform: '小红书', source: 'mock', simulated: true, collectedAt: new Date().toISOString() },
-  }))
+  app.get('/api/opportunities', async (request, response, next) => {
+    try {
+      if (!xiaohongshuMcpUrl) {
+        return response.json({
+          data: analyzeOpportunities(mockXiaohongshuTrends),
+          meta: { platform: '小红书', source: 'mock', simulated: true, collectedAt: new Date().toISOString() },
+        })
+      }
+      const requested = String(request.query.keywords ?? '').split(',').map(item => item.trim()).filter(Boolean).slice(0, 10)
+      const keywords = requested.length ? requested : mockXiaohongshuTrends.map(item => item.keyword)
+      const metrics = []
+      for (const keyword of keywords) {
+        const execution = await automationService.execute({
+          adapterId: 'xiaohongshu-mcp',
+          capability: 'xiaohongshu.trends.collect',
+          payload: { keyword, filters: { sort_by: '最多收藏', publish_time: '一周内' } },
+        })
+        metrics.push(mapSearchFeedsToMetric(keyword, extractFeeds(execution.output)))
+      }
+      response.json({
+        data: analyzeOpportunities(metrics),
+        meta: {
+          platform: '小红书', source: 'xiaohongshu-mcp', simulated: false,
+          method: '搜索结果互动代理值（非官方搜索指数）', collectedAt: new Date().toISOString(),
+        },
+      })
+    } catch (error) { next(error) }
+  })
   app.post('/api/customer-service/analyze', (request, response) => {
     const { message } = customerIntentInputSchema.parse(request.body)
     const intent = analyzeCustomerIntent(message)

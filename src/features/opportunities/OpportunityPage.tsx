@@ -6,6 +6,7 @@ import './opportunity-page.css'
 export function OpportunityPage({ onCreateBrief, onNotice }: { onCreateBrief: (brief: OpportunityBrief) => void; onNotice: (message: string) => void }) {
   const [items, setItems] = useState<Opportunity[]>([])
   const [simulated, setSimulated] = useState(false)
+  const [sourceMethod, setSourceMethod] = useState('')
   const [loading, setLoading] = useState(true)
 
   const load = useCallback(async () => {
@@ -14,6 +15,7 @@ export function OpportunityPage({ onCreateBrief, onNotice }: { onCreateBrief: (b
       const result = await opportunitiesApi.list()
       setItems(result.data)
       setSimulated(result.meta.simulated)
+      setSourceMethod(result.meta.method ?? '')
     } catch (error) {
       onNotice(error instanceof Error ? error.message : '趋势机会加载失败')
     } finally {
@@ -28,7 +30,7 @@ export function OpportunityPage({ onCreateBrief, onNotice }: { onCreateBrief: (b
       <div><p>小红书趋势雷达</p><h1>蓝海选品机会</h1><span>需求供给 40% · 增长 25% · 互动 20% · 竞争 15%</span></div>
       <div>{simulated && <em>模拟趋势数据</em>}<button className="secondary" onClick={() => void load()} disabled={loading}><RefreshCw size={17}/>重新采集</button></div>
     </header>
-    <div className="opportunity-note">当前数据用于功能开发与流程验证，不代表小红书真实热度。接入 RPA/MCP 后只替换采集适配器，评分和页面保持不变。</div>
+    <div className="opportunity-note">{simulated ? '当前数据用于功能开发与流程验证，不代表小红书真实热度。配置 XHS_MCP_URL 后将自动切换真实搜索结果。' : `数据来自已登录的小红书 MCP；${sourceMethod || '指标根据搜索结果计算'}。`}</div>
     {loading ? <div className="opportunity-empty">正在分析趋势…</div> : <div className="opportunity-grid">{items.map(item => <article key={item.keyword}>
       <div className="opportunity-score"><strong>{item.score}</strong><span>机会分</span></div>
       <div className="opportunity-title"><div><h2>{item.keyword}</h2><p>{item.signals.join(' · ')}</p></div><span className={`risk ${item.risk}`}>{item.risk === 'low' ? '低风险' : item.risk === 'medium' ? '中风险' : '高风险'}</span></div>
