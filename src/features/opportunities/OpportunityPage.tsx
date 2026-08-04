@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowUpRight, RefreshCw, Sparkles } from 'lucide-react'
+import { ArrowUpRight, RefreshCw, Settings2, Sparkles } from 'lucide-react'
 import { createOpportunityBrief, opportunitiesApi, type Opportunity, type OpportunityBrief } from './opportunities.api'
 import './opportunity-page.css'
 
@@ -8,6 +8,9 @@ export function OpportunityPage({ onCreateBrief, onNotice }: { onCreateBrief: (b
   const [simulated, setSimulated] = useState(false)
   const [sourceMethod, setSourceMethod] = useState('')
   const [loading, setLoading] = useState(true)
+  const [configOpen, setConfigOpen] = useState(false)
+  const [keywordText, setKeywordText] = useState('')
+  const [savingKeywords, setSavingKeywords] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -24,12 +27,30 @@ export function OpportunityPage({ onCreateBrief, onNotice }: { onCreateBrief: (b
   }, [onNotice])
 
   useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    void opportunitiesApi.listKeywords().then(result => setKeywordText(result.data.join('\n'))).catch(error => onNotice(error instanceof Error ? error.message : '趋势种子词加载失败'))
+  }, [onNotice])
+
+  const saveKeywords = async () => {
+    const keywords = [...new Set(keywordText.split(/\r?\n/).map(item => item.trim()).filter(Boolean))].slice(0, 10)
+    if (!keywords.length) return onNotice('请至少填写一个趋势种子词')
+    setSavingKeywords(true)
+    try {
+      const result = await opportunitiesApi.saveKeywords(keywords)
+      setKeywordText(result.data.join('\n'))
+      setConfigOpen(false)
+      onNotice(`已保存 ${result.data.length} 个趋势种子词，正在重新采集`)
+      await load()
+    } catch (error) { onNotice(error instanceof Error ? error.message : '趋势种子词保存失败') }
+    finally { setSavingKeywords(false) }
+  }
 
   return <section className="opportunity-page">
     <header className="opportunity-head">
       <div><p>小红书趋势雷达</p><h1>蓝海选品机会</h1><span>需求供给 40% · 增长 25% · 互动 20% · 竞争 15%</span></div>
-      <div>{simulated && <em>模拟趋势数据</em>}<button className="secondary" onClick={() => void load()} disabled={loading}><RefreshCw size={17}/>重新采集</button></div>
+      <div>{simulated && <em>模拟趋势数据</em>}<button className="secondary" onClick={() => setConfigOpen(value => !value)}><Settings2 size={17}/>配置种子词</button><button className="secondary" onClick={() => void load()} disabled={loading}><RefreshCw size={17}/>重新采集</button></div>
     </header>
+    {configOpen && <section className="keyword-config"><div><h2>趋势种子词</h2><p>每行一个，最多10个；保存后立即使用新词重新采集。</p></div><label><span>趋势种子词，每行一个</span><textarea aria-label="趋势种子词，每行一个" value={keywordText} onChange={event => setKeywordText(event.target.value)} rows={6}/></label><div className="keyword-actions"><button onClick={() => setConfigOpen(false)}>取消</button><button className="primary" disabled={savingKeywords} onClick={() => void saveKeywords()}>{savingKeywords ? '保存中…' : '保存并重新采集'}</button></div></section>}
     <div className="opportunity-note">{simulated ? '当前数据用于功能开发与流程验证，不代表小红书真实热度。配置 XHS_MCP_URL 后将自动切换真实搜索结果。' : `数据来自已登录的小红书 MCP；${sourceMethod || '指标根据搜索结果计算'}。`}</div>
     {loading ? <div className="opportunity-empty">正在分析趋势…</div> : <div className="opportunity-grid">{items.map(item => <article key={item.keyword}>
       <div className="opportunity-score"><strong>{item.score}</strong><span>机会分</span></div>

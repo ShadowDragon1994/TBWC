@@ -52,6 +52,22 @@ describe('customer service assistant API', () => {
 })
 
 describe('Xiaohongshu opportunity API', () => {
+  it('persists page-configurable seed keywords and uses them for opportunity collection', async () => {
+    const database = createTestDatabase()
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads' })
+
+    await request(app).put('/api/opportunity-keywords').send({ keywords: ['七夕礼物', '新中式香薰', '七夕礼物'] }).expect(200).expect(response => {
+      expect(response.body.data).toEqual(['七夕礼物', '新中式香薰'])
+    })
+    await request(app).get('/api/opportunity-keywords').expect(200).expect(response => {
+      expect(response.body.data).toEqual(['七夕礼物', '新中式香薰'])
+    })
+    await request(app).get('/api/opportunities').expect(200).expect(response => {
+      expect(response.body.data.map((item: { keyword: string }) => item.keyword).sort()).toEqual(['七夕礼物', '新中式香薰'].sort())
+    })
+    database.close()
+  })
+
   it('returns explainable blue-ocean scores from the simulated trend source', async () => {
     const database = createTestDatabase()
     const app = createApp({ database, uploadDir: 'tmp/test-uploads' })

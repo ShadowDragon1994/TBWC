@@ -19,10 +19,12 @@ const opportunities = [{
 
 describe('OpportunityPage', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((input: string) => Promise.resolve(new Response(JSON.stringify(input === '/api/opportunity-keywords' ? {
+      data: ['非遗漆扇礼盒'],
+    } : {
       data: opportunities,
       meta: { platform: '小红书', source: 'mock', simulated: true, collectedAt: '2026-07-28T00:00:00.000Z' },
-    }), { status: 200, headers: { 'Content-Type': 'application/json' } })))
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))))
   })
 
   it('shows source-labelled opportunity evidence and creates a differentiation brief', async () => {
@@ -39,5 +41,23 @@ describe('OpportunityPage', () => {
       titleDirection: expect.any(String),
       visualDirection: expect.any(String),
     })))
+  })
+
+  it('edits and persists trend seed keywords from the page', async () => {
+    const fetchMock = vi.fn().mockImplementation((input: string, options?: RequestInit) => {
+      if (input === '/api/opportunity-keywords' && options?.method === 'PUT') return Promise.resolve(new Response(JSON.stringify({ data: ['七夕礼物', '新中式香薰'] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      if (input === '/api/opportunity-keywords') return Promise.resolve(new Response(JSON.stringify({ data: ['非遗漆扇礼盒'] }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      return Promise.resolve(new Response(JSON.stringify({ data: opportunities, meta: { platform: '小红书', source: 'mock', simulated: true, collectedAt: '' } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    render(<OpportunityPage onCreateBrief={vi.fn()} onNotice={vi.fn()}/>)
+
+    await userEvent.click(await screen.findByRole('button', { name: '配置种子词' }))
+    const editor = screen.getByLabelText('趋势种子词，每行一个')
+    await userEvent.clear(editor)
+    await userEvent.type(editor, '七夕礼物\n新中式香薰')
+    await userEvent.click(screen.getByRole('button', { name: '保存并重新采集' }))
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/api/opportunity-keywords', expect.objectContaining({ method: 'PUT' })))
   })
 })

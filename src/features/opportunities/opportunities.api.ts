@@ -29,6 +29,18 @@ export const opportunitiesApi = {
       meta: { platform: '小红书'; source: string; simulated: boolean; method?: string; collectedAt: string }
     }>
   },
+  async listKeywords() {
+    const response = await fetch('/api/opportunity-keywords')
+    if (!response.ok) throw new Error('趋势种子词加载失败')
+    return response.json() as Promise<{ data: string[] }>
+  },
+  async saveKeywords(keywords: string[]) {
+    const response = await fetch('/api/opportunity-keywords', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ keywords }),
+    })
+    if (!response.ok) throw new Error('趋势种子词保存失败')
+    return response.json() as Promise<{ data: string[] }>
+  },
 }
 
 export function createOpportunityBrief(opportunity: Opportunity): OpportunityBrief {

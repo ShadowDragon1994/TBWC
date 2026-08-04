@@ -4,7 +4,7 @@ import { extname, resolve } from 'node:path'
 import express, { type ErrorRequestHandler } from 'express'
 import helmet from 'helmet'
 import multer from 'multer'
-import { ZodError } from 'zod'
+import { z, ZodError } from 'zod'
 import type { AppDatabase } from './shared/database'
 import { createProductRepository } from './products/product.repository'
 import { createProductService, ProductNotFoundError } from './products/product.service'
@@ -41,6 +41,7 @@ import { analyzeCustomerIntent, buildServiceReply } from './customer-service/int
 import { buildFestivalPlan, calculateMape, festivalSeeds } from './festivals/festival.service'
 import { analyzeInventory, detectCompetitorChanges, mockCompetitors, mockInventory } from './inventory/inventory.service'
 import { findMock1688Offer, searchMock1688Offers } from './sourcing/mock-1688'
+import { createOpportunityKeywordRepository } from './opportunities/opportunity-keyword.repository'
 
 export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch, xiaohongshuMcpUrl = '', xiaohongshuMcpFetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch; xiaohongshuMcpUrl?: string; xiaohongshuMcpFetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
@@ -62,6 +63,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
     ...(xiaohongshuMcpUrl ? [createXiaohongshuMcpAdapter({ url: xiaohongshuMcpUrl, fetchImpl: xiaohongshuMcpFetchImpl })] : []),
   ]
   const automationService = createAutomationService({ adapters: automationAdapters, store: createAutomationRepository(database) })
+  const opportunityKeywords = createOpportunityKeywordRepository(database)
   const upload = multer({
     storage: multer.diskStorage({ destination: uploadDir, filename: (_request, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -223,16 +225,23 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
       response.status(201).json({ data: await automationService.retry(String(request.params.id), input.payload) })
     } catch (error) { next(error) }
   })
+  app.get('/api/opportunity-keywords', (_request, response) => response.json({ data: opportunityKeywords.list() }))
+  app.put('/api/opportunity-keywords', (request, response) => {
+    const input = z.object({ keywords: z.array(z.string().trim().min(1).max(60)).min(1).max(10) }).parse(request.body)
+    response.json({ data: opportunityKeywords.replace([...new Set(input.keywords)]) })
+  })
   app.get('/api/opportunities', async (request, response, next) => {
     try {
+      const requested = String(request.query.keywords ?? '').split(',').map(item => item.trim()).filter(Boolean).slice(0, 10)
+      const keywords = requested.length ? requested : opportunityKeywords.list()
       if (!xiaohongshuMcpUrl) {
         return response.json({
-          data: analyzeOpportunities(mockXiaohongshuTrends),
+          data: analyzeOpportunities(keywords.map(keyword => mockXiaohongshuTrends.find(item => item.keyword === keyword) ?? {
+            keyword, searchHeat: 0, noteCount: 0, growthRate: 0, engagementRate: 0, competitorCount: 0,
+          })),
           meta: { platform: '小红书', source: 'mock', simulated: true, collectedAt: new Date().toISOString() },
         })
       }
-      const requested = String(request.query.keywords ?? '').split(',').map(item => item.trim()).filter(Boolean).slice(0, 10)
-      const keywords = requested.length ? requested : mockXiaohongshuTrends.map(item => item.keyword)
       const metrics = []
       for (const keyword of keywords) {
         const execution = await automationService.execute({

@@ -112,7 +112,17 @@ function migrate(database: AppDatabase) {
       emergency_stopped INTEGER NOT NULL DEFAULT 0 CHECK(emergency_stopped IN (0,1))
     );
     INSERT OR IGNORE INTO automation_control(id, emergency_stopped) VALUES(1, 0);
+    CREATE TABLE IF NOT EXISTS opportunity_keywords (
+      position INTEGER PRIMARY KEY,
+      keyword TEXT NOT NULL UNIQUE
+    );
   `)
+  const keywordCount = database.prepare('SELECT COUNT(*) AS count FROM opportunity_keywords').get() as { count: number }
+  if (keywordCount.count === 0) {
+    const insertKeyword = database.prepare('INSERT INTO opportunity_keywords(position, keyword) VALUES(?, ?)')
+    const defaultKeywords = ['非遗漆扇礼盒', '毕业季手写信礼物', '东方香囊随身挂件', '普通陶瓷马克杯', '教师节定制书签']
+    defaultKeywords.forEach((keyword, position) => insertKeyword.run(position, keyword))
+  }
   const creationColumns = new Set((database.prepare('PRAGMA table_info(creation_records)').all() as Array<{ name: string }>).map(column => column.name))
   if (!creationColumns.has('source')) database.exec("ALTER TABLE creation_records ADD COLUMN source TEXT NOT NULL DEFAULT 'manual'")
   if (!creationColumns.has('version_number')) database.exec('ALTER TABLE creation_records ADD COLUMN version_number INTEGER NOT NULL DEFAULT 1')
