@@ -42,6 +42,7 @@ import { buildFestivalPlan, calculateMape, festivalSeeds } from './festivals/fes
 import { analyzeInventory, detectCompetitorChanges, mockCompetitors, mockInventory } from './inventory/inventory.service'
 import { findMock1688Offer, searchMock1688Offers } from './sourcing/mock-1688'
 import { createOpportunityKeywordRepository } from './opportunities/opportunity-keyword.repository'
+import { createOpportunityCacheRepository } from './opportunities/opportunity-cache.repository'
 
 export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch, xiaohongshuMcpUrl = '', xiaohongshuMcpFetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch; xiaohongshuMcpUrl?: string; xiaohongshuMcpFetchImpl?: typeof fetch }) {
   mkdirSync(uploadDir, { recursive: true })
@@ -64,6 +65,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   ]
   const automationService = createAutomationService({ adapters: automationAdapters, store: createAutomationRepository(database) })
   const opportunityKeywords = createOpportunityKeywordRepository(database)
+  const opportunityCache = createOpportunityCacheRepository(database)
   const upload = multer({
     storage: multer.diskStorage({ destination: uploadDir, filename: (_request, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -234,13 +236,18 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
     try {
       const requested = String(request.query.keywords ?? '').split(',').map(item => item.trim()).filter(Boolean).slice(0, 10)
       const keywords = requested.length ? requested : opportunityKeywords.list()
+      const forceRefresh = request.query.refresh === 'true'
+      const cached = !forceRefresh ? opportunityCache.find(keywords) : undefined
+      if (cached) return response.json({ ...cached, meta: { ...cached.meta, cached: true } })
       if (!xiaohongshuMcpUrl) {
-        return response.json({
+        const result = {
           data: analyzeOpportunities(keywords.map(keyword => mockXiaohongshuTrends.find(item => item.keyword === keyword) ?? {
             keyword, searchHeat: 0, noteCount: 0, growthRate: 0, engagementRate: 0, competitorCount: 0,
           })),
-          meta: { platform: '小红书', source: 'mock', simulated: true, collectedAt: new Date().toISOString() },
-        })
+          meta: { platform: '小红书', source: 'mock', simulated: true, cached: false, collectedAt: new Date().toISOString() },
+        }
+        opportunityCache.save(keywords, result)
+        return response.json(result)
       }
       const metrics = []
       for (const keyword of keywords) {
@@ -251,13 +258,15 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
         })
         metrics.push(mapSearchFeedsToMetric(keyword, extractFeeds(execution.output)))
       }
-      response.json({
+      const result = {
         data: analyzeOpportunities(metrics),
         meta: {
           platform: '小红书', source: 'xiaohongshu-mcp', simulated: false,
-          method: '搜索结果互动代理值（非官方搜索指数）', collectedAt: new Date().toISOString(),
+          method: '搜索结果互动代理值（非官方搜索指数）', cached: false, collectedAt: new Date().toISOString(),
         },
-      })
+      }
+      opportunityCache.save(keywords, result)
+      response.json(result)
     } catch (error) { next(error) }
   })
   app.post('/api/customer-service/analyze', (request, response) => {

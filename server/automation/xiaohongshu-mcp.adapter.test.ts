@@ -42,4 +42,15 @@ describe('Xiaohongshu MCP adapter', () => {
 
     expect(result.output).toMatchObject({ keyword: '非遗漆扇', feeds: expect.any(Array), simulated: false })
   })
+
+  it('rejects MCP tool results that report an internal deadline error', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ jsonrpc: '2.0', id: 1, result: { protocolVersion: '2025-03-26', capabilities: {}, serverInfo: {} } }))
+      .mockResolvedValueOnce(new Response(null, { status: 202 }))
+      .mockResolvedValueOnce(jsonResponse({ jsonrpc: '2.0', id: 2, result: { isError: true, content: [{ type: 'text', text: '工具 search_feeds 执行时发生内部错误：context deadline exceeded' }] } }))
+    const adapter = createXiaohongshuMcpAdapter({ url: 'http://127.0.0.1:18060/mcp', fetchImpl })
+
+    await expect(adapter.execute({ id: 'job-3', capability: 'xiaohongshu.trends.collect', payload: { keyword: '教师节书签' } }))
+      .rejects.toThrow('context deadline exceeded')
+  })
 })

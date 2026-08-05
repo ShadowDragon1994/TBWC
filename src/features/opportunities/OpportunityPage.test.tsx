@@ -41,6 +41,8 @@ describe('OpportunityPage', () => {
       titleDirection: expect.any(String),
       visualDirection: expect.any(String),
     })))
+    await userEvent.click(screen.getByRole('button', { name: '重新采集' }))
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/opportunities?refresh=true'))
   })
 
   it('edits and persists trend seed keywords from the page', async () => {

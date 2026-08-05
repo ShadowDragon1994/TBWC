@@ -85,6 +85,12 @@ describe('Xiaohongshu opportunity API', () => {
         },
       })
     })
+    await request(app).get('/api/opportunities').expect(200).expect(response => {
+      expect(response.body.meta.cached).toBe(true)
+    })
+    await request(app).get('/api/opportunities?refresh=true').expect(200).expect(response => {
+      expect(response.body.meta.cached).toBe(false)
+    })
     database.close()
   })
 })

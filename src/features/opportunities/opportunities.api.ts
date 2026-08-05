@@ -21,12 +21,12 @@ export type OpportunityBrief = {
 }
 
 export const opportunitiesApi = {
-  async list() {
-    const response = await fetch('/api/opportunities')
+  async list(refresh = false) {
+    const response = await fetch(`/api/opportunities${refresh ? '?refresh=true' : ''}`)
     if (!response.ok) throw new Error('趋势机会加载失败')
     return response.json() as Promise<{
       data: Opportunity[]
-      meta: { platform: '小红书'; source: string; simulated: boolean; method?: string; collectedAt: string }
+      meta: { platform: '小红书'; source: string; simulated: boolean; cached?: boolean; method?: string; collectedAt: string }
     }>
   },
   async listKeywords() {

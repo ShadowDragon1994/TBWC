@@ -3,6 +3,7 @@ import type { AutomationAdapter, AutomationCapability } from './automation.servi
 type McpResult = {
   content?: Array<{ type: string; text?: string }>
   structuredContent?: Record<string, unknown>
+  isError?: boolean
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
@@ -36,6 +37,7 @@ export function createXiaohongshuMcpAdapter({
       method: 'POST',
       headers,
       body: JSON.stringify({ jsonrpc: '2.0', ...(notification ? {} : { id: requestId }), method, params }),
+      signal: AbortSignal.timeout(70_000),
     })
     if (!response.ok) throw new Error(`小红书 MCP 请求失败：HTTP ${response.status}`)
     sessionId ||= response.headers.get('mcp-session-id') ?? ''
@@ -58,7 +60,12 @@ export function createXiaohongshuMcpAdapter({
 
   async function callTool(name: string, args: Record<string, unknown>) {
     await ensureSession()
-    return parseToolOutput(await post('tools/call', { name, arguments: args }))
+    const result = await post('tools/call', { name, arguments: args })
+    if (result.isError) {
+      const message = result.content?.find(item => item.type === 'text')?.text ?? `${name} 执行失败`
+      throw new Error(`小红书 MCP 工具错误：${message}`)
+    }
+    return parseToolOutput(result)
   }
 
   return {

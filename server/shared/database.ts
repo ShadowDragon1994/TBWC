@@ -116,6 +116,12 @@ function migrate(database: AppDatabase) {
       position INTEGER PRIMARY KEY,
       keyword TEXT NOT NULL UNIQUE
     );
+    CREATE TABLE IF NOT EXISTS opportunity_cache (
+      id INTEGER PRIMARY KEY CHECK(id = 1),
+      keywords TEXT NOT NULL,
+      response TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `)
   const keywordCount = database.prepare('SELECT COUNT(*) AS count FROM opportunity_keywords').get() as { count: number }
   if (keywordCount.count === 0) {
