@@ -237,7 +237,8 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
       const requested = String(request.query.keywords ?? '').split(',').map(item => item.trim()).filter(Boolean).slice(0, 10)
       const keywords = requested.length ? requested : opportunityKeywords.list()
       const forceRefresh = request.query.refresh === 'true'
-      const cached = !forceRefresh ? opportunityCache.find(keywords) : undefined
+      const cacheKey = [xiaohongshuMcpUrl ? 'source:xiaohongshu-mcp' : 'source:mock', ...keywords]
+      const cached = !forceRefresh ? opportunityCache.find(cacheKey) : undefined
       if (cached) return response.json({ ...cached, meta: { ...cached.meta, cached: true } })
       if (!xiaohongshuMcpUrl) {
         const result = {
@@ -246,7 +247,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
           })),
           meta: { platform: '小红书', source: 'mock', simulated: true, cached: false, collectedAt: new Date().toISOString() },
         }
-        opportunityCache.save(keywords, result)
+        opportunityCache.save(cacheKey, result)
         return response.json(result)
       }
       const metrics = []
@@ -265,7 +266,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
           method: '搜索结果互动代理值（非官方搜索指数）', cached: false, collectedAt: new Date().toISOString(),
         },
       }
-      opportunityCache.save(keywords, result)
+      opportunityCache.save(cacheKey, result)
       response.json(result)
     } catch (error) { next(error) }
   })
