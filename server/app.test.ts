@@ -95,6 +95,29 @@ describe('Xiaohongshu opportunity API', () => {
   })
 })
 
+describe('1688 sourcing RPA API', () => {
+  it('persists real RPA offers and imports the selected offer into the product library', async () => {
+    const database = createTestDatabase()
+    const search1688 = vi.fn().mockResolvedValue([{
+      id: 'rpa-offer-1', title: '七夕定制香囊礼盒', category: '1688货源', wholesalePrice: 26.8,
+      suggestedRetailPrice: 79, minOrder: 2, supplier: '杭州礼品工厂',
+      supplierUrl: 'https://detail.1688.com/offer/123.html', material: '', size: '', color: '',
+      audience: '', scene: '七夕', sellingPoints: '支持定制；礼盒包装',
+    }])
+    const app = createApp({ database, uploadDir: 'tmp/test-uploads', search1688 })
+
+    await request(app).get('/api/sourcing/1688?q=七夕礼物').expect(200).expect(response => {
+      expect(response.body.meta).toMatchObject({ source: '1688-rpa', simulated: false })
+      expect(response.body.data[0]).toMatchObject({ id: 'rpa-offer-1', supplier: '杭州礼品工厂' })
+    })
+    await request(app).post('/api/sourcing/1688/rpa-offer-1/import').expect(201).expect(response => {
+      expect(response.body.data.product).toMatchObject({ name: '七夕定制香囊礼盒', cost: 26.8, supplier: '杭州礼品工厂' })
+    })
+    expect(search1688).toHaveBeenCalledWith('七夕礼物')
+    database.close()
+  })
+})
+
 describe('automation bridge API', () => {
   it('lists adapter capabilities and executes an auditable simulated Xiaohongshu publish job', async () => {
     const database = createTestDatabase()

@@ -17,7 +17,7 @@ describe('App interactions', () => {
     const imported = { id: 'p1', name: offer.title, category: offer.category, price: 99, cost: 35, supplier: offer.supplier, supplierUrl: offer.supplierUrl, assets: [], createdAt: '', updatedAt: '' }
     let productList: typeof imported[] = []
     const fetchMock = vi.fn().mockImplementation((input: string, options?: RequestInit) => {
-      if (input === '/api/sourcing/1688?q=' && !options) return Promise.resolve(new Response(JSON.stringify({ data: [offer], meta: { source: '1688-mock', simulated: true, replaceableAdapter: true } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      if (input === '/api/sourcing/1688?q=%E7%A4%BC%E7%9B%92' && !options) return Promise.resolve(new Response(JSON.stringify({ data: [offer], meta: { source: '1688-mock', simulated: true, replaceableAdapter: true } }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
       if (input === '/api/sourcing/1688/offer-1/import' && options?.method === 'POST') {
         productList = [imported]
         return Promise.resolve(new Response(JSON.stringify({ data: { product: imported, execution: { id: 'run-1', status: 'succeeded' } } }), { status: 201, headers: { 'Content-Type': 'application/json' } }))
@@ -27,9 +27,11 @@ describe('App interactions', () => {
     vi.stubGlobal('fetch', fetchMock)
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: '商品库' }))
-    await userEvent.click(screen.getByRole('button', { name: '1688模拟货源' }))
+    await userEvent.click(screen.getByRole('button', { name: '1688货源采集' }))
+    await userEvent.type(screen.getByRole('textbox', { name: '搜索1688货源' }), '礼盒')
+    await userEvent.click(screen.getByRole('button', { name: '搜索' }))
     await userEvent.click(await screen.findByRole('button', { name: '导入商品库' }))
-    expect(await screen.findByRole('status')).toHaveTextContent('已从1688模拟货源导入')
+    expect(await screen.findByRole('status')).toHaveTextContent('已从1688货源导入')
     expect(await screen.findByRole('heading', { name: offer.title, level: 2 })).toBeInTheDocument()
   })
 

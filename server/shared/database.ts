@@ -122,6 +122,12 @@ function migrate(database: AppDatabase) {
       response TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS sourcing_offers (
+      id TEXT PRIMARY KEY,
+      source TEXT NOT NULL,
+      offer_json TEXT NOT NULL,
+      collected_at TEXT NOT NULL
+    );
   `)
   const keywordCount = database.prepare('SELECT COUNT(*) AS count FROM opportunity_keywords').get() as { count: number }
   if (keywordCount.count === 0) {

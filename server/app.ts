@@ -43,8 +43,11 @@ import { analyzeInventory, detectCompetitorChanges, mockCompetitors, mockInvento
 import { findMock1688Offer, searchMock1688Offers } from './sourcing/mock-1688'
 import { createOpportunityKeywordRepository } from './opportunities/opportunity-keyword.repository'
 import { createOpportunityCacheRepository } from './opportunities/opportunity-cache.repository'
+import { createSourcingOfferRepository } from './sourcing/sourcing-offer.repository'
+import { create1688RpaAutomationAdapter } from './sourcing/rpa-1688.adapter'
+import type { Search1688, SourcingOffer } from './sourcing/sourcing.types'
 
-export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch, xiaohongshuMcpUrl = '', xiaohongshuMcpFetchImpl = fetch }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch; xiaohongshuMcpUrl?: string; xiaohongshuMcpFetchImpl?: typeof fetch }) {
+export function createApp({ database, uploadDir, frontendDir, encryptionKey = randomBytes(32), fetchImpl = fetch, xiaohongshuMcpUrl = '', xiaohongshuMcpFetchImpl = fetch, search1688 }: { database: AppDatabase; uploadDir: string; frontendDir?: string; encryptionKey?: Buffer; fetchImpl?: typeof fetch; xiaohongshuMcpUrl?: string; xiaohongshuMcpFetchImpl?: typeof fetch; search1688?: Search1688 }) {
   mkdirSync(uploadDir, { recursive: true })
   const app = express()
   const productService = createProductService(createProductRepository(database))
@@ -62,10 +65,12 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   const automationAdapters = [
     createMockAutomationAdapter(),
     ...(xiaohongshuMcpUrl ? [createXiaohongshuMcpAdapter({ url: xiaohongshuMcpUrl, fetchImpl: xiaohongshuMcpFetchImpl })] : []),
+    ...(search1688 ? [create1688RpaAutomationAdapter(search1688)] : []),
   ]
   const automationService = createAutomationService({ adapters: automationAdapters, store: createAutomationRepository(database) })
   const opportunityKeywords = createOpportunityKeywordRepository(database)
   const opportunityCache = createOpportunityCacheRepository(database)
+  const sourcingOffers = createSourcingOfferRepository(database)
   const upload = multer({
     storage: multer.diskStorage({ destination: uploadDir, filename: (_request, file, callback) => callback(null, `${randomUUID()}${extname(file.originalname).toLowerCase()}`) }),
     limits: { fileSize: 10 * 1024 * 1024, files: 1 },
@@ -96,14 +101,23 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
   app.get('/health', (_request, response) => response.json({ status: 'ok' }))
   app.get('/ready', (_request, response) => response.json({ status: 'ok', database: 'ok', application: 'zaowutai' }))
   app.get('/api/products', (_request, response) => response.json({ data: productService.list().map(product => ({ ...product, assets: assetRepository.list(product.id) })) }))
-  app.get('/api/sourcing/1688', (request, response) => {
-    response.json({ data: searchMock1688Offers(String(request.query.q ?? '')), meta: { source: '1688-mock', simulated: true, replaceableAdapter: true } })
+  app.get('/api/sourcing/1688', async (request, response, next) => {
+    try {
+      const query = String(request.query.q ?? '').trim()
+      if (!search1688) return response.json({ data: searchMock1688Offers(query), meta: { source: '1688-mock', simulated: true, replaceableAdapter: true } })
+      if (!query) return response.status(422).json({ code: 'SOURCING_QUERY_REQUIRED', message: '真实1688采集需要输入货源关键词' })
+      const execution = await automationService.execute({ adapterId: 'rpa-1688', capability: 'supply.1688.collect', payload: { query } })
+      const offers = Array.isArray(execution.output.offers) ? execution.output.offers as SourcingOffer[] : []
+      sourcingOffers.saveAll('1688-rpa', offers)
+      response.json({ data: offers, meta: { source: '1688-rpa', simulated: false, replaceableAdapter: true, executionId: execution.id } })
+    } catch (error) { next(error) }
   })
   app.post('/api/sourcing/1688/:offerId/import', async (request, response, next) => {
     try {
-      const offer = findMock1688Offer(String(request.params.offerId))
-      if (!offer) return response.status(404).json({ code: 'SOURCING_OFFER_NOT_FOUND', message: '1688模拟货源不存在' })
-      const execution = await automationService.execute({ adapterId: 'mock', capability: 'supply.1688.collect', payload: { offerId: offer.id, supplierUrl: offer.supplierUrl } })
+      const offer = sourcingOffers.find(String(request.params.offerId)) ?? findMock1688Offer(String(request.params.offerId))
+      if (!offer) return response.status(404).json({ code: 'SOURCING_OFFER_NOT_FOUND', message: '1688货源不存在，请重新搜索' })
+      const adapterId = sourcingOffers.find(offer.id) && search1688 ? 'rpa-1688' : 'mock'
+      const execution = await automationService.execute({ adapterId, capability: 'supply.1688.collect', payload: { offerId: offer.id, supplierUrl: offer.supplierUrl } })
       const product = productService.create(productInputSchema.parse({
         name: offer.title, category: offer.category, price: offer.suggestedRetailPrice, cost: offer.wholesalePrice,
         material: offer.material, size: offer.size, color: offer.color, audience: offer.audience, scene: offer.scene,

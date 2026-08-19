@@ -76,6 +76,7 @@ try {
   $env:DATA_DIR = $dataDir
   $env:FRONTEND_DIR = Join-Path $projectRoot 'dist'
   $env:BACKUP_DIR = Join-Path $dataDir 'backups'
+  if (-not $env:SOURCING_1688_MODE) { $env:SOURCING_1688_MODE = 'rpa' }
   $process = Start-Process -FilePath $nodePath -ArgumentList @($tsxCli, 'server/index.ts') -WorkingDirectory $projectRoot -WindowStyle Hidden -RedirectStandardOutput $logPath -RedirectStandardError $errorLogPath -PassThru
   @{ pid = $process.Id; port = $port; projectRoot = $projectRoot; startedAt = $process.StartTime.ToUniversalTime().ToString('o') } |
     ConvertTo-Json -Compress |
