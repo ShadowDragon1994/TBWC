@@ -76,7 +76,8 @@ export function createXiaohongshuMcpAdapter({
       if (job.capability === 'xiaohongshu.trends.collect') {
         const keyword = String(job.payload.keyword ?? '').trim()
         if (!keyword) throw new Error('趋势采集必须提供关键词')
-        const output = await callTool('search_feeds', { keyword, filters: objectValue(job.payload.filters) })
+        const filters = objectValue(job.payload.filters)
+        const output = await callTool('search_feeds', { keyword, ...(Object.keys(filters).length ? { filters } : {}) })
         return { output: { keyword, ...output, simulated: false } }
       }
       if (job.capability === 'xiaohongshu.publish') {

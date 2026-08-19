@@ -255,7 +255,7 @@ export function createApp({ database, uploadDir, frontendDir, encryptionKey = ra
         const execution = await automationService.execute({
           adapterId: 'xiaohongshu-mcp',
           capability: 'xiaohongshu.trends.collect',
-          payload: { keyword, filters: { sort_by: '最多收藏', publish_time: '一周内' } },
+          payload: { keyword },
         })
         metrics.push(mapSearchFeedsToMetric(keyword, extractFeeds(execution.output)))
       }

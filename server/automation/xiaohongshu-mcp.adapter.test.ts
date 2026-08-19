@@ -52,5 +52,6 @@ describe('Xiaohongshu MCP adapter', () => {
 
     await expect(adapter.execute({ id: 'job-3', capability: 'xiaohongshu.trends.collect', payload: { keyword: '教师节书签' } }))
       .rejects.toThrow('context deadline exceeded')
+    expect(String(fetchImpl.mock.calls.at(-1)?.[1]?.body)).not.toContain('filters')
   })
 })
