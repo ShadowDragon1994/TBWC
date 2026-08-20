@@ -1,0 +1,22 @@
+{
+  "run_id": "demo",
+  "workspace": ".",
+  "env": {},
+  "steps": [
+    {
+      "id": "write-artifact",
+      "command": "python -c \"from pathlib import Path; Path('artifact.txt').write_text('ready', encoding='utf-8')\"",
+      "timeout_seconds": 30,
+      "retries": 0
+    }
+  ],
+  "verifier": {
+    "command": "python -c \"from pathlib import Path; assert Path('artifact.txt').read_text(encoding='utf-8') == 'ready'\"",
+    "timeout_seconds": 30
+  },
+  "budgets": {
+    "max_actions": 10,
+    "max_seconds": 120,
+    "max_repeated_action": 3
+  }
+}

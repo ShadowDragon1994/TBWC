@@ -1,0 +1,637 @@
+--- a/backend/go.mod
++++ b/backend/go.mod
+@@ -16,6 +16,7 @@
+ 	github.com/aws/aws-sdk-go-v2/service/s3 v1.101.0
+ 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.1
+ 	github.com/aws/smithy-go v1.27.1
++	github.com/bububa/opentaobao v1.4.6
+ 	github.com/gin-gonic/gin v1.12.0
+ 	github.com/glebarez/go-sqlite v1.21.2
+ 	github.com/glebarez/sqlite v1.11.0
+--- a/backend/go.sum
++++ b/backend/go.sum
+@@ -95,6 +95,8 @@
+ github.com/bsm/ginkgo/v2 v2.12.0/go.mod h1:SwYbGRRDovPVboqFv0tPTcG1sN61LM1Z4ARdbAV9g4c=
+ github.com/bsm/gomega v1.27.10 h1:yeMWxP2pV2fG3FgAODIY8EiRE3dy0aeFYt4l7wh6yKA=
+ github.com/bsm/gomega v1.27.10/go.mod h1:JyEr/xRbxbtgWNi8tIEVPUYZ5Dzef52k01W3YH0H+O0=
++github.com/bububa/opentaobao v1.4.6 h1:KBMEP124iVJr4DNoZet+pbDCA5EX3POn1JJIQLDJ+Io=
++github.com/bububa/opentaobao v1.4.6/go.mod h1:CuQQEvR0juywSdKFJfKxtNFq/A50ucbKksdo+kzETCk=
+ github.com/bytedance/gopkg v0.1.3 h1:TPBSwH8RsouGCBcMBktLt1AymVo2TVsBVCY4b6TnZ/M=
+ github.com/bytedance/gopkg v0.1.3/go.mod h1:576VvJ+eJgyCzdjS+c4+77QF3p7ubbtiKARP3TxducM=
+ github.com/bytedance/sonic v1.15.0 h1:/PXeWFaR5ElNcVE84U0dOHjiMHQOwNIx3K4ymzh/uSE=
+--- a/backend/internal/api/router.go
++++ b/backend/internal/api/router.go
+@@ -69,6 +69,7 @@
+ 	platformdouyin "github.com/trademind-ai/trademind/backend/internal/providers/platform/douyinshop"
+ 	platformlazada "github.com/trademind-ai/trademind/backend/internal/providers/platform/lazada"
+ 	platformshopee "github.com/trademind-ai/trademind/backend/internal/providers/platform/shopee"
++	platformtaobao "github.com/trademind-ai/trademind/backend/internal/providers/platform/taobao"
+ 	platformtiktok "github.com/trademind-ai/trademind/backend/internal/providers/platform/tiktok"
+ 	"github.com/trademind-ai/trademind/backend/internal/rdb"
+ 	"gorm.io/gorm"
+@@ -388,6 +389,8 @@
+ 	platformlazada.RegisterProvider()
+ 	platformamazon.BindShops(shopSvc.AmazonShopsBridge())
+ 	platformamazon.RegisterProvider()
++	platformtaobao.BindShops(shopSvc.TaobaoShopsBridge())
++	platformtaobao.RegisterProvider()
+ 	shopH := &shop.Handler{Svc: shopSvc}
+ 
+ 	storagePublicSvc := &storagepublic.Service{Settings: settingsSvc, OpLog: opLogSvc}
+--- a/backend/internal/modules/shop/provider_visibility_test.go
++++ b/backend/internal/modules/shop/provider_visibility_test.go
+@@ -13,6 +13,7 @@
+ 
+ 	production := (&Service{AppEnv: config.EnvProduction}).ListPlatformProviders()
+ 	require.NotEmpty(t, production)
++	require.True(t, hasPlatformProvider(production, "1688"))
+ 	for _, provider := range production {
+ 		require.NotEqual(t, "mock", provider.Platform)
+ 		require.Contains(t, []string{platformp.StatusAvailable, platformp.StatusBeta}, provider.Status)
+--- a/backend/internal/providers/platform/app_config_presets.go
++++ b/backend/internal/providers/platform/app_config_presets.go
+@@ -140,6 +140,21 @@
+ 	}
+ }
+ 
++// TaobaoAppConfigSchema describes the TOP application shared by Taobao shops.
++func TaobaoAppConfigSchema() PlatformAppConfigSchema {
++	return PlatformAppConfigSchema{
++		GroupKey:    "platform_taobao",
++		Title:       "淘宝开放平台",
++		Description: "淘宝开放平台 TOP 应用参数；店铺级 Session/Access Token 保存在店铺授权中。",
++		Fields: []AppConfigField{
++			{Name: "app_key", Label: "App Key", Type: "text", Required: true, Sensitive: false},
++			{Name: "app_secret", Label: "App Secret", Type: "password", Required: true, Sensitive: true},
++			{Name: "api_gateway", Label: "API Gateway（可选）", Type: "text", Required: false, Sensitive: false, Placeholder: "https://eco.taobao.com/router/rest"},
++			{Name: "sandbox_enabled", Label: "Sandbox", Type: "switch", Required: false, Sensitive: false, DefaultValue: false},
++		},
++	}
++}
++
+ func AliExpressAppConfigSchema() PlatformAppConfigSchema {
+ 	return PlatformAppConfigSchema{
+ 		GroupKey:    "platform_aliexpress",
+--- a/backend/internal/providers/platform/bootstrap.go
++++ b/backend/internal/providers/platform/bootstrap.go
+@@ -4,6 +4,7 @@
+ func Bootstrap() {
+ 	Register(newManualProvider())
+ 	Register(newMockProvider())
++	Register(new1688Provider())
+ 
+ 	Register(newPlannedProvider("aliexpress", "AliExpress", StatusPlanned, "oauth2", []Capability{
+ 		CapOrderSync, CapProductPublish, CapCustomerMessage,
+--- a/backend/internal/providers/platform/product_publish.go
++++ b/backend/internal/providers/platform/product_publish.go
+@@ -96,7 +96,7 @@
+ 		return StatusDisabled
+ 	case "douyin_shop":
+ 		return StatusBeta
+-	case "tiktok", "shopee", "lazada", "amazon":
++	case "tiktok", "shopee", "lazada", "amazon", "taobao":
+ 		return StatusBeta
+ 	default:
+ 		if !HasCapability(p, CapProductPublish) {
+--- a/backend/internal/providers/platform/providers_builtin.go
++++ b/backend/internal/providers/platform/providers_builtin.go
+@@ -69,6 +69,32 @@
+ 	_ = ctx
+ 	_ = req
+ 	return nil, ErrManualInventorySyncUnsupported
++}
++
++// source1688Prov lets users model an authenticated 1688 supplier storefront in
++// the shared shop directory. Collection remains owned by Collector Provider;
++// this entry deliberately exposes manual management only.
++type source1688Prov struct{}
++
++func new1688Provider() Provider { return source1688Prov{} }
++
++func (source1688Prov) Platform() string { return "1688" }
++func (source1688Prov) Name() string     { return "1688 供货店铺" }
++func (source1688Prov) Status() string   { return StatusAvailable }
++func (source1688Prov) Capabilities() []Capability {
++	return []Capability{CapManualManage}
++}
++func (source1688Prov) AuthSchema() AuthSchema {
++	return AuthSchema{AuthType: "manual", Fields: []AuthField{
++		{Name: "sellerId", Label: "1688 供应商/会员 ID（可选）", Type: "text", Required: false, Sensitive: false},
++	}}
++}
++func (source1688Prov) AppConfigSchema() PlatformAppConfigSchema { return PlatformAppConfigSchema{} }
++func (source1688Prov) PublishConfigSchema() PlatformAppConfigSchema {
++	return emptyPublishSchema()
++}
++func (source1688Prov) TestConnection(context.Context, TestConnectionRequest) (*TestConnectionResult, error) {
++	return &TestConnectionResult{OK: true, Message: "1688 供货店铺已登记；商品采集使用 1688 采集器"}, nil
+ }
+ 
+ type mockProv struct{}
+--- a/backend/internal/providers/platform/publish_config_presets.go
++++ b/backend/internal/providers/platform/publish_config_presets.go
+@@ -46,6 +46,8 @@
+ 		return lazadaPublishSchema()
+ 	case "amazon":
+ 		return amazonPublishSchema()
++	case "taobao":
++		return taobaoPublishSchema()
+ 	case "aliexpress":
+ 		return aliexpressPublishSchema()
+ 	case "shopify":
+@@ -71,6 +73,21 @@
+ 	}
+ }
+ 
++func taobaoPublishSchema() PlatformAppConfigSchema {
++	return PlatformAppConfigSchema{
++		GroupKey:    "platform_publish_taobao",
++		Title:       "淘宝商品刊登配置",
++		Description: "基于 alibaba.item.publish.submit；Schema 模板应先按目标类目从淘宝开放平台获取并校准。",
++		Fields: []AppConfigField{
++			{Name: "market", Label: "发布市场", Type: "select", Required: true, Sensitive: false, DefaultValue: "taobao", Options: []AppConfigOption{{Label: "淘宝", Value: "taobao"}, {Label: "天猫", Value: "tmall"}, {Label: "淘宝特价版", Value: "litetao"}}},
++			{Name: "default_category_id", Label: "默认类目 ID", Type: "text", Required: true, Sensitive: false},
++			{Name: "default_spu_id", Label: "默认产品 SPU ID（天猫必填）", Type: "text", Required: false, Sensitive: false},
++			{Name: "biz_type", Label: "业务扩展类型（可选）", Type: "text", Required: false, Sensitive: false},
++			{Name: "schema_template", Label: "商品 Schema XML 模板", Type: "textarea", Required: true, Sensitive: false, Help: "支持 {{title}}、{{description}}、{{main_image_url}}、{{price}}、{{stock}}、{{sku_code}} 占位符；任务 options 可覆盖。"},
++		},
++	}
++}
++
+ func tiktokPublishSchema() PlatformAppConfigSchema {
+ 	return PlatformAppConfigSchema{
+ 		GroupKey:    "platform_publish_tiktok",
+--- a/docs/PROGRESS.md
++++ b/docs/PROGRESS.md
+@@ -1,6 +1,10 @@
+ # TradeMind 当前维护状态
+ 
+-更新时间：2026-08-15
++更新时间：2026-08-20
++
++## 淘宝刊登 Provider
++
++新增 `taobao` Beta Platform Provider，沿用现有 PostgreSQL 刊登任务、Redis Worker、租约续期、幂等批次、失败恢复和 publication/SKU 回写链路。Provider 复用 `opentaobao` Go SDK，接入 TOP 卖家连接检查与 `alibaba.item.publish.submit`；应用凭据、店铺 Session、类目/市场/SPU/Schema 模板分别进入现有平台设置、店铺授权和刊登设置。默认配置不会触发真实平台写入，启用后仍须经过现有人工审核与运行开关。
+ 
+ ## 生命周期
+ 
+--- a/docs/provider.md
++++ b/docs/provider.md
+@@ -100,6 +100,7 @@
+ - Shopee
+ - Lazada
+ - Amazon
++- 淘宝 / 天猫（`taobao`）：复用商品刊登队列与 `ProductPublishProvider`，通过 Apache-2.0 的 `github.com/bububa/opentaobao` 调用 `alibaba.item.publish.submit`。应用级 App Key/Secret 存在 `platform_taobao`，店铺 Session 存在店铺授权，类目、市场、SPU 与 Schema XML 模板存在 `platform_publish_taobao`。Schema 模板支持商品标题、描述、主图、首个 SKU 价格/库存/编码占位符；任务 options 可覆盖默认参数。真实提交继续受现有刊登总开关、队列、人工审核、租户与店铺边界约束。
+ 
+ 当前真实平台接入顺序优先跑通抖店，不要把抖店与 TikTok Shop 混用：抖店统一内部标识为 `douyin_shop`，TikTok Shop 仍代表跨境平台。当前 Release Candidate 已包含平台配置、OAuth、Client/签名、类目属性、字段映射、图片上传、平台商品草稿创建、订单同步 MVP、库存同步 MVP、SKU 绑定校准与手动兜底、生产预检、运行状态和可观测性。自动化回归由 GitHub Actions 执行；真实平台全链路验收与灰度观察由维护者在授权环境人工完成。
+ 
+--- /dev/null
++++ b/backend/internal/modules/shop/taobao_bridge.go
+@@ -0,0 +1,29 @@
++package shop
++
++import (
++	"context"
++	"strings"
++
++	platformtaobao "github.com/trademind-ai/trademind/backend/internal/providers/platform/taobao"
++)
++
++func (s *Service) TaobaoShopsBridge() platformtaobao.ShopsBridge {
++	return taobaoBridge{svc: s}
++}
++
++type taobaoBridge struct{ svc *Service }
++
++func (b taobaoBridge) TaobaoGlobalSettings(ctx context.Context) (map[string]string, error) {
++	if b.svc == nil || b.svc.Settings == nil || b.svc.Settings.DB == nil {
++		return map[string]string{}, nil
++	}
++	m, err := b.svc.Settings.PlainByGroup(ctx, 0, "platform_taobao")
++	if err != nil {
++		return nil, err
++	}
++	out := make(map[string]string, len(m))
++	for key, value := range m {
++		out[strings.ToLower(strings.TrimSpace(key))] = strings.TrimSpace(value)
++	}
++	return out, nil
++}
+--- /dev/null
++++ b/backend/internal/providers/platform/taobao/client.go
+@@ -0,0 +1,60 @@
++package taobao
++
++import (
++	"context"
++	"strconv"
++
++	itemapi "github.com/bububa/opentaobao/api/tbitem"
++	userapi "github.com/bububa/opentaobao/api/tbuser"
++	"github.com/bububa/opentaobao/core"
++	itemmodel "github.com/bububa/opentaobao/model/tbitem"
++	usermodel "github.com/bububa/opentaobao/model/tbuser"
++)
++
++type sellerResult struct{ nick, id string }
++type publishResult struct {
++	itemID, market, requestID, createTime string
++}
++
++type topClient interface {
++	Seller(ctx context.Context, session string) (sellerResult, error)
++	Publish(ctx context.Context, session string, input submitInput) (publishResult, error)
++}
++
++type sdkClient struct{ client *core.SDKClient }
++
++var newTOPClient = func(cfg runtimeConfig) topClient { return sdkClient{client: newSDK(cfg)} }
++
++func (c sdkClient) Seller(ctx context.Context, session string) (sellerResult, error) {
++	req := usermodel.NewTaobaoUserSellerGetRequest()
++	_ = req.SetFields([]string{"user_id", "nick", "status", "has_shop"})
++	resp := new(usermodel.TaobaoUserSellerGetAPIResponse)
++	if err := userapi.TaobaoUserSellerGet(ctx, c.client, req, resp, session); err != nil {
++		return sellerResult{}, err
++	}
++	if resp.User == nil {
++		return sellerResult{}, errEmptySeller
++	}
++	return sellerResult{nick: resp.User.Nick, id: strconv.FormatInt(resp.User.UserId, 10)}, nil
++}
++
++func (c sdkClient) Publish(ctx context.Context, session string, input submitInput) (publishResult, error) {
++	req := itemmodel.NewAlibabaItemPublishSubmitRequest()
++	_ = req.SetMarket(input.market)
++	_ = req.SetCatId(input.categoryID)
++	_ = req.SetSchema(input.schema)
++	if input.spuID > 0 {
++		_ = req.SetSpuId(input.spuID)
++	}
++	if input.bizType != "" {
++		_ = req.SetBizType(input.bizType)
++	}
++	if input.barcode != "" {
++		_ = req.SetBarcode(input.barcode)
++	}
++	resp := new(itemmodel.AlibabaItemPublishSubmitAPIResponse)
++	if err := itemapi.AlibabaItemPublishSubmit(ctx, c.client, req, resp, session); err != nil {
++		return publishResult{}, err
++	}
++	return publishResult{itemID: strconv.FormatInt(resp.ItemId, 10), market: resp.Market, requestID: resp.RequestId, createTime: resp.CreateTime}, nil
++}
+--- /dev/null
++++ b/backend/internal/providers/platform/taobao/deps.go
+@@ -0,0 +1,13 @@
++package taobao
++
++import "context"
++
++// ShopsBridge provides decrypted deploy-level settings without coupling the
++// provider to the settings module.
++type ShopsBridge interface {
++	TaobaoGlobalSettings(ctx context.Context) (map[string]string, error)
++}
++
++var shopsBridge ShopsBridge
++
++func BindShops(bridge ShopsBridge) { shopsBridge = bridge }
+--- /dev/null
++++ b/backend/internal/providers/platform/taobao/product_publish.go
+@@ -0,0 +1,143 @@
++package taobao
++
++import (
++	"bytes"
++	"context"
++	"encoding/xml"
++	"errors"
++	"fmt"
++	"strconv"
++	"strings"
++
++	platformp "github.com/trademind-ai/trademind/backend/internal/providers/platform"
++)
++
++var errEmptySeller = errors.New("淘宝开放平台未返回卖家信息")
++
++type submitInput struct {
++	market, schema, bizType, barcode string
++	categoryID, spuID                int64
++}
++
++func (provider) PublishProduct(ctx context.Context, req platformp.PublishProductRequest) (*platformp.PublishProductResult, error) {
++	cfg, err := resolveRuntime(ctx, req.Auth)
++	if err != nil {
++		return nil, err
++	}
++	input, err := buildSubmitInput(req)
++	if err != nil {
++		return nil, err
++	}
++	result, err := newTOPClient(cfg).Publish(ctx, cfg.accessToken, input)
++	if err != nil {
++		msg := redactTOPError(err)
++		if strings.Contains(strings.ToLower(msg), "permission") || strings.Contains(msg, "权限") {
++			return nil, fmt.Errorf("%w: %s", platformp.ErrPlatformProductPublishPermissionDenied, msg)
++		}
++		return nil, fmt.Errorf("taobao product publish: %s", msg)
++	}
++	if result.itemID == "" || result.itemID == "0" {
++		return nil, fmt.Errorf("taobao product publish: platform did not return item id")
++	}
++	return &platformp.PublishProductResult{
++		ExternalProductID: result.itemID,
++		ExternalSPUID:     strconv.FormatInt(input.spuID, 10),
++		ExternalURL:       listingURL(input.market, result.itemID),
++		Status:            "published",
++		SKUMappings:       nil, // submit does not return remote SKU IDs; a later detail sync must bind them.
++		RawSummary:        platformp.TrimRawMap(map[string]any{"provider": "taobao", "market": result.market, "requestId": result.requestID, "createTime": result.createTime, "categoryId": input.categoryID, "submittedSkuCount": len(req.Product.SKUs)}, 10, 180),
++	}, nil
++}
++
++func buildSubmitInput(req platformp.PublishProductRequest) (submitInput, error) {
++	value := func(key string) string {
++		if req.Options != nil {
++			if v := strings.TrimSpace(fmt.Sprint(req.Options[key])); v != "" && v != "<nil>" {
++				return v
++			}
++		}
++		if req.PublishConfig != nil {
++			if v := strings.TrimSpace(fmt.Sprint(req.PublishConfig[key])); v != "" && v != "<nil>" {
++				return v
++			}
++		}
++		return ""
++	}
++	market := strings.ToLower(value("market"))
++	if market == "" {
++		market = "taobao"
++	}
++	if market != "taobao" && market != "tmall" && market != "litetao" {
++		return submitInput{}, fmt.Errorf("taobao product publish: invalid market %q", market)
++	}
++	categoryID, err := strconv.ParseInt(value("default_category_id"), 10, 64)
++	if override := value("category_id"); override != "" {
++		categoryID, err = strconv.ParseInt(override, 10, 64)
++	}
++	if err != nil || categoryID <= 0 {
++		return submitInput{}, fmt.Errorf("taobao product publish: category_id is required")
++	}
++	spuID, _ := strconv.ParseInt(value("default_spu_id"), 10, 64)
++	if override := value("spu_id"); override != "" {
++		spuID, err = strconv.ParseInt(override, 10, 64)
++		if err != nil || spuID <= 0 {
++			return submitInput{}, fmt.Errorf("taobao product publish: invalid spu_id")
++		}
++	}
++	if market == "tmall" && spuID <= 0 {
++		return submitInput{}, fmt.Errorf("taobao product publish: spu_id is required for tmall")
++	}
++	template := value("schema_template")
++	if schema := value("item_schema"); schema != "" {
++		template = schema
++	}
++	if template == "" {
++		return submitInput{}, fmt.Errorf("taobao product publish: schema_template is required")
++	}
++	schema := renderSchema(template, req)
++	if err := xml.Unmarshal([]byte(schema), new(any)); err != nil {
++		return submitInput{}, fmt.Errorf("taobao product publish: invalid schema XML: %w", err)
++	}
++	return submitInput{market: market, categoryID: categoryID, spuID: spuID, bizType: value("biz_type"), barcode: value("barcode"), schema: schema}, nil
++}
++
++func renderSchema(template string, req platformp.PublishProductRequest) string {
++	mainImage := ""
++	if len(req.Product.Images) > 0 {
++		mainImage = req.Product.Images[0].URL
++	}
++	price, stock, skuCode := "", "", ""
++	if len(req.Product.SKUs) > 0 {
++		price = strconv.FormatFloat(req.Product.SKUs[0].Price, 'f', -1, 64)
++		stock = strconv.Itoa(req.Product.SKUs[0].Stock)
++		skuCode = req.Product.SKUs[0].SKUCode
++	}
++	escape := func(value string) string {
++		var out bytes.Buffer
++		_ = xml.EscapeText(&out, []byte(value))
++		return out.String()
++	}
++	values := map[string]string{"title": req.Product.Title, "description": req.Product.Description, "main_image_url": mainImage, "price": price, "stock": stock, "sku_code": skuCode}
++	for key, value := range values {
++		template = strings.ReplaceAll(template, "{{"+key+"}}", escape(value))
++	}
++	return template
++}
++
++func listingURL(market, itemID string) string {
++	if market == "tmall" {
++		return "https://detail.tmall.com/item.htm?id=" + itemID
++	}
++	return "https://item.taobao.com/item.htm?id=" + itemID
++}
++
++func redactTOPError(err error) string {
++	if err == nil {
++		return ""
++	}
++	msg := strings.TrimSpace(err.Error())
++	if len(msg) > 400 {
++		msg = msg[:400]
++	}
++	return msg
++}
+--- /dev/null
++++ b/backend/internal/providers/platform/taobao/product_publish_test.go
+@@ -0,0 +1,77 @@
++package taobao
++
++import (
++	"context"
++	"testing"
++
++	"github.com/google/uuid"
++	"github.com/stretchr/testify/require"
++
++	platformp "github.com/trademind-ai/trademind/backend/internal/providers/platform"
++)
++
++type fakeTOPClient struct {
++	input  submitInput
++	result publishResult
++	err    error
++}
++
++func (f *fakeTOPClient) Seller(context.Context, string) (sellerResult, error) {
++	return sellerResult{nick: "fixture-shop", id: "1001"}, f.err
++}
++
++func (f *fakeTOPClient) Publish(_ context.Context, _ string, input submitInput) (publishResult, error) {
++	f.input = input
++	return f.result, f.err
++}
++
++func TestBuildSubmitInputRendersEscapedDraftValues(t *testing.T) {
++	req := publishRequest()
++	input, err := buildSubmitInput(req)
++	require.NoError(t, err)
++	require.Equal(t, int64(500123), input.categoryID)
++	require.Contains(t, input.schema, "文创&lt;新品&gt;")
++	require.Contains(t, input.schema, "29.9")
++	require.Contains(t, input.schema, "SKU-1")
++}
++
++func TestPublishProductReturnsPlatformIdentifiers(t *testing.T) {
++	fake := &fakeTOPClient{result: publishResult{itemID: "123456789", market: "taobao", requestID: "request-1"}}
++	original := newTOPClient
++	newTOPClient = func(runtimeConfig) topClient { return fake }
++	t.Cleanup(func() { newTOPClient = original })
++
++	result, err := (provider{}).PublishProduct(context.Background(), publishRequest())
++	require.NoError(t, err)
++	require.Equal(t, "123456789", result.ExternalProductID)
++	require.Equal(t, "https://item.taobao.com/item.htm?id=123456789", result.ExternalURL)
++	require.Equal(t, "published", result.Status)
++	require.Empty(t, result.SKUMappings)
++	require.Equal(t, int64(500123), fake.input.categoryID)
++}
++
++func TestBuildSubmitInputRequiresTmallSPU(t *testing.T) {
++	req := publishRequest()
++	req.Options["market"] = "tmall"
++	_, err := buildSubmitInput(req)
++	require.ErrorContains(t, err, "spu_id is required for tmall")
++}
++
++func publishRequest() platformp.PublishProductRequest {
++	return platformp.PublishProductRequest{
++		ShopID: uuid.New(),
++		Auth:   platformp.TestConnectionRequest{AppKey: "app-key", AppSecret: "app-secret", AccessToken: "session"},
++		Product: platformp.PlatformProductDraft{
++			Title:       "文创<新品>",
++			Description: "商品详情",
++			Images:      []platformp.PlatformProductImage{{URL: "https://example.invalid/main.jpg"}},
++			SKUs:        []platformp.PlatformProductSKU{{LocalSKUID: uuid.New(), SKUCode: "SKU-1", Price: 29.9, Stock: 12}},
++		},
++		PublishConfig: map[string]any{
++			"market":              "taobao",
++			"default_category_id": "500123",
++			"schema_template":     `<item><title>{{title}}</title><price>{{price}}</price><stock>{{stock}}</stock><sku>{{sku_code}}</sku></item>`,
++		},
++		Options: map[string]any{},
++	}
++}
+--- /dev/null
++++ b/backend/internal/providers/platform/taobao/provider.go
+@@ -0,0 +1,102 @@
++package taobao
++
++import (
++	"context"
++	"fmt"
++	"strings"
++
++	"github.com/bububa/opentaobao/core"
++	platformp "github.com/trademind-ai/trademind/backend/internal/providers/platform"
++)
++
++type provider struct{}
++
++func NewProvider() platformp.Provider { return provider{} }
++
++func (provider) Platform() string { return "taobao" }
++func (provider) Name() string     { return "淘宝 / 天猫开放平台" }
++func (provider) Status() string   { return platformp.StatusBeta }
++func (provider) Capabilities() []platformp.Capability {
++	return []platformp.Capability{platformp.CapShopInfo, platformp.CapProductPublish}
++}
++func (provider) AuthSchema() platformp.AuthSchema {
++	return platformp.AuthSchema{AuthType: "oauth2", Fields: []platformp.AuthField{
++		{Name: "accessToken", Label: "Session / Access Token", Type: "password", Required: true, Sensitive: true, Hint: "淘宝开放平台店铺授权后取得的 Session。"},
++	}}
++}
++func (provider) AppConfigSchema() platformp.PlatformAppConfigSchema {
++	return platformp.TaobaoAppConfigSchema()
++}
++func (provider) PublishConfigSchema() platformp.PlatformAppConfigSchema {
++	return platformp.PublishConfigPresetForPlatform("taobao")
++}
++
++func (provider) TestConnection(ctx context.Context, req platformp.TestConnectionRequest) (*platformp.TestConnectionResult, error) {
++	cfg, err := resolveRuntime(ctx, req)
++	if err != nil {
++		return &platformp.TestConnectionResult{OK: false, Message: err.Error()}, nil
++	}
++	user, err := newTOPClient(cfg).Seller(ctx, cfg.accessToken)
++	if err != nil {
++		return &platformp.TestConnectionResult{OK: false, Message: redactTOPError(err)}, nil
++	}
++	return &platformp.TestConnectionResult{OK: true, Message: "淘宝开放平台连接正常", ShopName: user.nick, ExternalShopID: user.id, Currency: "CNY"}, nil
++}
++
++type runtimeConfig struct {
++	appKey, appSecret, accessToken, gateway string
++	sandbox                                 bool
++}
++
++func resolveRuntime(ctx context.Context, auth platformp.TestConnectionRequest) (runtimeConfig, error) {
++	global := map[string]string{}
++	if shopsBridge != nil {
++		m, err := shopsBridge.TaobaoGlobalSettings(ctx)
++		if err != nil {
++			return runtimeConfig{}, fmt.Errorf("load taobao settings: %w", err)
++		}
++		global = m
++	}
++	first := func(values ...string) string {
++		for _, value := range values {
++			if value = strings.TrimSpace(value); value != "" {
++				return value
++			}
++		}
++		return ""
++	}
++	cfg := runtimeConfig{
++		appKey:      first(auth.AppKey, global["app_key"]),
++		appSecret:   first(auth.AppSecret, global["app_secret"]),
++		accessToken: strings.TrimSpace(auth.AccessToken),
++		gateway:     first(auth.Extra["api_gateway"], global["api_gateway"]),
++		sandbox:     truthy(first(auth.Extra["sandbox_enabled"], global["sandbox_enabled"])),
++	}
++	if cfg.appKey == "" || cfg.appSecret == "" {
++		return runtimeConfig{}, fmt.Errorf("淘宝开放平台 App Key/App Secret 未配置")
++	}
++	if cfg.accessToken == "" {
++		return runtimeConfig{}, fmt.Errorf("淘宝店铺 Session/Access Token 未配置")
++	}
++	return cfg, nil
++}
++
++func truthy(value string) bool {
++	switch strings.ToLower(strings.TrimSpace(value)) {
++	case "1", "true", "yes", "on":
++		return true
++	default:
++		return false
++	}
++}
++
++func newSDK(cfg runtimeConfig) *core.SDKClient {
++	client := core.NewSDKClient(cfg.appKey, cfg.appSecret)
++	if cfg.gateway != "" {
++		client.SetGateway(cfg.gateway)
++	}
++	if cfg.sandbox {
++		client.UseSandbox()
++	}
++	return client
++}
+--- /dev/null
++++ b/backend/internal/providers/platform/taobao/register.go
+@@ -0,0 +1,5 @@
++package taobao
++
++import platformp "github.com/trademind-ai/trademind/backend/internal/providers/platform"
++
++func RegisterProvider() { platformp.Register(NewProvider()) }

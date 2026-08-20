@@ -1,0 +1,11 @@
+{
+  "name": "trademind-ai",
+  "repository": "https://github.com/lien0219/trademind-ai.git",
+  "ref": "dev-v0.2.0",
+  "license": "Apache-2.0",
+  "images": {
+    "backend": "ghcr.io/lien0219/trademind-backend:dev-v0.2.0",
+    "admin": "ghcr.io/lien0219/trademind-admin:dev-v0.2.0",
+    "collector": "ghcr.io/lien0219/trademind-collector:dev-v0.2.0"
+  }
+}

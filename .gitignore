@@ -1,0 +1,12 @@
+.agent-runs/
+artifact.txt
+__pycache__/
+*.pyc
+.env
+vendor/trademind-ai/
+vendor/trademind-src/
+vendor/postgresql-*/
+vendor/*.zip
+vendor/pg-password.txt
+local-status/
+trademind.zip
