@@ -5,6 +5,10 @@ $root = Split-Path -Parent $PSScriptRoot
 $lock = Get-Content -Raw (Join-Path $root "vendor/trademind.lock.json") | ConvertFrom-Json
 $target = Join-Path $root $Destination
 
+if (-not (Test-Path (Join-Path $root ".env"))) {
+    Copy-Item (Join-Path $root ".env.example") (Join-Path $root ".env")
+}
+
 if (Test-Path (Join-Path $target ".git")) {
     git -C $target fetch --tags --depth 1 origin $lock.ref
     git -C $target checkout --detach $lock.ref
@@ -20,16 +24,21 @@ if ($LASTEXITCODE -ne 0 -or $actual -ne $lock.ref) {
 $patch = Join-Path $root "patches/trademind-taobao.patch"
 if (Test-Path $patch) {
     git -C $target apply --check $patch
-    if ($LASTEXITCODE -ne 0) {
-        throw "TradeMind integration patch verification failed: $patch"
-    }
-    git -C $target apply $patch
-    if ($LASTEXITCODE -ne 0) {
-        throw "TradeMind integration patch apply failed: $patch"
+    if ($LASTEXITCODE -eq 0) {
+        git -C $target apply $patch
+        if ($LASTEXITCODE -ne 0) {
+            throw "TradeMind integration patch apply failed: $patch"
+        }
+        Write-Host "Integration patch applied: patches/trademind-taobao.patch"
+    } else {
+        git -C $target apply --reverse --check $patch
+        if ($LASTEXITCODE -ne 0) {
+            throw "TradeMind integration patch conflicts with the current source: $patch"
+        }
+        Write-Host "Integration patch already applied; continuing."
     }
 }
 
 Copy-Item (Join-Path $root ".env") (Join-Path $target ".env") -Force
 Write-Host "TradeMind $actual is ready at $target"
-Write-Host "Integration patch applied: patches/trademind-taobao.patch"
 Write-Host "Start: docker compose -f '$target/docker-compose.full.yml' up -d --build"

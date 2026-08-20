@@ -9,4 +9,6 @@ vendor/postgresql-*/
 vendor/*.zip
 vendor/pg-password.txt
 local-status/
+/install-windows.log
+/TBWC-*.zip
 trademind.zip

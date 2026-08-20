@@ -4,6 +4,26 @@
 
 ## Web 工具启动准备
 
+### Windows 一键安装（业务部署电脑）
+
+解压项目后，右键或双击运行：
+
+```cmd
+scripts\install-windows.cmd
+```
+
+安装器通过 Windows Package Manager 安装 Git、PowerShell 7、Node.js LTS、Go 和 Docker Desktop，随后生成本地 `.env`、获取锁定版本 TradeMind、应用淘宝补丁、验证集成并通过 Docker Compose 启动服务。首次安装 Docker Desktop/WSL 2 后如提示重启，重启电脑并再次运行同一脚本即可继续。
+
+仅检查环境、不执行安装：
+
+```cmd
+scripts\install-windows.cmd --check-only
+```
+
+完整日志保存在项目根目录 `install-windows.log`。
+
+### 手动初始化
+
 ```powershell
 Copy-Item .env.example .env
 ./scripts/bootstrap-trademind.ps1
