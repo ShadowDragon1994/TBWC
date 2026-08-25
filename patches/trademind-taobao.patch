@@ -635,3 +635,269 @@
 +import platformp "github.com/trademind-ai/trademind/backend/internal/providers/platform"
 +
 +func RegisterProvider() { platformp.Register(NewProvider()) }
+diff --git a/admin/.umirc.ts b/admin/.umirc.ts
+index c9278fb..ee032e1 100644
+--- a/admin/.umirc.ts
++++ b/admin/.umirc.ts
+@@ -7,3 +7,3 @@ const lightTheme = createStaticLightThemeConfig();
+ export default defineConfig({
+-  title: '贸灵 TradeMind',
++  title: '迷饰 Mystory',
+   npmClient: 'npm',
+@@ -33,3 +33,3 @@ export default defineConfig({
+     '/api': {
+-      target: 'http://127.0.0.1:8080',
++      target: 'http://127.0.0.1:8081',
+       changeOrigin: true,
+@@ -37,3 +37,3 @@ export default defineConfig({
+     '/static': {
+-      target: 'http://127.0.0.1:8080',
++      target: 'http://127.0.0.1:8081',
+       changeOrigin: true,
+diff --git a/admin/config/routes.ts b/admin/config/routes.ts
+index bc429f2..38f83fe 100644
+--- a/admin/config/routes.ts
++++ b/admin/config/routes.ts
+@@ -421,2 +421,3 @@ export default [
+     icon: 'CustomerServiceOutlined',
++    hideInMenu: true,
+     component: '@/layouts/CustomerGroupLayout',
+diff --git a/admin/e2e/specs/admin-smoke.spec.ts b/admin/e2e/specs/admin-smoke.spec.ts
+index 2abc3d7..4cb8337 100644
+--- a/admin/e2e/specs/admin-smoke.spec.ts
++++ b/admin/e2e/specs/admin-smoke.spec.ts
+@@ -275,3 +275,3 @@ test.describe("@smoke Admin route smoke", () => {
+         path: "/settings/integrations",
+-        messages: ["贸灵不提供也不内置任何第三方密钥"],
++        messages: ["迷饰不提供也不内置任何第三方密钥"],
+       },
+diff --git a/admin/src/app.tsx b/admin/src/app.tsx
+index acf16c4..b764d19 100644
+--- a/admin/src/app.tsx
++++ b/admin/src/app.tsx
+@@ -170,4 +170,4 @@ function AppBrandButton() {
+       <span className="tm-app-brand-header__name">
+-        <span className="tm-app-brand-header__name-primary">贸灵</span>
+-        <span className="tm-app-brand-header__name-secondary">TradeMind</span>
++        <span className="tm-app-brand-header__name-primary">迷饰</span>
++        <span className="tm-app-brand-header__name-secondary">Mystory</span>
+       </span>
+diff --git a/admin/src/components/platform/PublishBoundaryBanner.tsx b/admin/src/components/platform/PublishBoundaryBanner.tsx
+index 0e429b3..2259947 100644
+--- a/admin/src/components/platform/PublishBoundaryBanner.tsx
++++ b/admin/src/components/platform/PublishBoundaryBanner.tsx
+@@ -24,3 +24,3 @@ export default function PublishBoundaryBanner({
+   if (isLocalOnly) {
+-    message = `${publishCapabilityLabel('local_draft_only')}：仅在 TradeMind 内保存草稿记录，不会调用平台写接口。`;
++    message = `${publishCapabilityLabel('local_draft_only')}：仅在 Mystory 内保存草稿记录，不会调用平台写接口。`;
+   } else if (isRealDraft) {
+diff --git a/admin/src/constants/emailSettings.ts b/admin/src/constants/emailSettings.ts
+index c2e9cc9..f7a4b4c 100644
+--- a/admin/src/constants/emailSettings.ts
++++ b/admin/src/constants/emailSettings.ts
+@@ -43,3 +43,3 @@ export const MAIL_FIELD_PLACEHOLDER = {
+   from: 'noreply@example.com',
+-  fromName: '贸灵 TradeMind',
++  fromName: '迷饰 Mystory',
+   testTo: 'test@example.com',
+diff --git a/admin/src/pages/Index/index.tsx b/admin/src/pages/Index/index.tsx
+index 01554b9..811657d 100644
+--- a/admin/src/pages/Index/index.tsx
++++ b/admin/src/pages/Index/index.tsx
+@@ -138,6 +138,6 @@ export default function IndexPage() {
+         <div className="landing-header__inner">
+-          <Link to="/" className="landing-brand" aria-label="TradeMind 首页">
++          <Link to="/" className="landing-brand" aria-label="迷饰 Mystory 首页">
+             <BrandLogo height={34} />
+             <span className="landing-brand__copy">
+-              <strong>贸灵 TradeMind</strong>
++              <strong>迷饰 Mystory</strong>
+               <small>AI 跨境电商运营平台</small>
+@@ -146,8 +146,2 @@ export default function IndexPage() {
+ 
+-          <nav className="landing-nav" aria-label="首页导航">
+-            <a href="#capabilities">产品能力</a>
+-            <a href="#workflow">工作流程</a>
+-            <a href="#deployment">开源部署</a>
+-          </nav>
+-
+           <div className="landing-header__actions">
+@@ -191,3 +185,3 @@ export default function IndexPage() {
+               <p>
+-                TradeMind 聚焦商品采集、草稿整理、AI
++                Mystory 聚焦商品采集、草稿整理、AI
+                 内容优化、图片处理、多平台刊登与库存协同，
+@@ -227,3 +221,3 @@ export default function IndexPage() {
+               className="landing-preview"
+-              aria-label="TradeMind 商品运营流程示意"
++              aria-label="Mystory 商品运营流程示意"
+               data-landing-reveal
+@@ -454,3 +448,3 @@ export default function IndexPage() {
+               className="landing-deployment__stack"
+-              aria-label="TradeMind 技术栈"
++              aria-label="Mystory 技术栈"
+               data-landing-reveal
+@@ -484,3 +478,3 @@ export default function IndexPage() {
+             <span className="landing-brand__copy">
+-              <strong>贸灵 TradeMind</strong>
++              <strong>迷饰 Mystory</strong>
+               <small>开源 AI 跨境电商运营平台</small>
+diff --git a/admin/src/pages/Settings/AlertNotify/index.tsx b/admin/src/pages/Settings/AlertNotify/index.tsx
+index 1520d18..bf4fbf3 100644
+--- a/admin/src/pages/Settings/AlertNotify/index.tsx
++++ b/admin/src/pages/Settings/AlertNotify/index.tsx
+@@ -417,3 +417,3 @@ export default function AlertNotifySettingsPage() {
+                         <Form.Item label="主题前缀" name="mail_subject_prefix" extra="留空则仅使用 [等级][分类] 标题">
+-                          <Input placeholder="例如 [TradeMind]" />
++                          <Input placeholder="例如 [Mystory]" />
+                         </Form.Item>
+diff --git a/admin/src/pages/Settings/Email/index.tsx b/admin/src/pages/Settings/Email/index.tsx
+index e34ad6d..f2d546f 100644
+--- a/admin/src/pages/Settings/Email/index.tsx
++++ b/admin/src/pages/Settings/Email/index.tsx
+@@ -113,3 +113,3 @@ export default function EmailSettingsPage() {
+               <Paragraph type="secondary" className="tm-system-settings__hero-desc">
+-                贸灵不提供邮件代发账号。请使用企业邮箱、QQ/网易客户端授权码、云邮件推送或 SendGrid /
++                迷饰不提供邮件代发账号。请使用企业邮箱、QQ/网易客户端授权码、云邮件推送或 SendGrid /
+                 Mailgun 等 SMTP。密码加密存库、接口脱敏，日志不记录明文密码。告警收件人请在{' '}
+diff --git a/admin/src/pages/Settings/Security/index.tsx b/admin/src/pages/Settings/Security/index.tsx
+index f7b42d6..900005d 100644
+--- a/admin/src/pages/Settings/Security/index.tsx
++++ b/admin/src/pages/Settings/Security/index.tsx
+@@ -842,3 +842,3 @@ export default function SecuritySettingsPage() {
+             <Paragraph type="secondary" style={{ marginBottom: 16, fontSize: 13 }}>
+-              用于验证外部系统向贸灵发起的运维类回调请求，与告警通知中的回调密钥相互独立。
++              用于验证外部系统向迷饰发起的运维类回调请求，与告警通知中的回调密钥相互独立。
+             </Paragraph>
+diff --git a/admin/src/pages/Settings/System/index.tsx b/admin/src/pages/Settings/System/index.tsx
+index 13dc3a4..2618857 100644
+--- a/admin/src/pages/Settings/System/index.tsx
++++ b/admin/src/pages/Settings/System/index.tsx
+@@ -224,3 +224,3 @@ export default function SystemSettingsPage() {
+                 <Form.Item label="站点名称" name="site_name" rules={[{ required: true, message: '请输入站点名称' }]}>
+-                  <Input placeholder="贸灵 TradeMind" />
++                  <Input placeholder="迷饰 Mystory" />
+                 </Form.Item>
+diff --git a/admin/src/pages/TaskCenter/OperationTasks/Detail.tsx b/admin/src/pages/TaskCenter/OperationTasks/Detail.tsx
+index 62d9d29..cc112b6 100644
+--- a/admin/src/pages/TaskCenter/OperationTasks/Detail.tsx
++++ b/admin/src/pages/TaskCenter/OperationTasks/Detail.tsx
+@@ -609,3 +609,3 @@ export default function OperationTaskDetailPage() {
+                             : isProductionBuild
+-                          ? '仅表示 TradeMind 内的本地草稿，不代表已发布商品。'
++                          ? '仅表示 Mystory 内的本地草稿，不代表已发布商品。'
+                           : '仅表示本地、模拟或沙箱草稿，不代表已发布商品。'
+diff --git a/admin/src/pages/User/Login/index.tsx b/admin/src/pages/User/Login/index.tsx
+index 06ed37a..2f89df3 100644
+--- a/admin/src/pages/User/Login/index.tsx
++++ b/admin/src/pages/User/Login/index.tsx
+@@ -161,3 +161,3 @@ export default function LoginPage() {
+               <div>
+-                <div className="brand-text">贸灵 TradeMind</div>
++                <div className="brand-text">迷饰 Mystory</div>
+                 <div className="brand-sub">AI-Powered Cross-Border ERP</div>
+@@ -177,3 +177,3 @@ export default function LoginPage() {
+               <p>
+-                从商品采集、图片处理、AI 优化到多平台刊登，TradeMind
++                从商品采集、图片处理、AI 优化到多平台刊登，Mystory
+                 把高频运营动作收进一个更轻、更快的工作台。
+@@ -227,3 +227,3 @@ export default function LoginPage() {
+               <div>
+-                <div className="brand-text">贸灵 TradeMind</div>
++                <div className="brand-text">迷饰 Mystory</div>
+                 <div className="brand-sub">AI-Powered Cross-Border ERP</div>
+@@ -248,3 +248,3 @@ export default function LoginPage() {
+                   {activeTab === 'login'
+-                    ? '登录你的 TradeMind 工作台'
++                    ? '登录你的 Mystory 工作台'
+                     : '开启你的 AI 跨境之旅'}
+diff --git a/admin/src/services/request.ts b/admin/src/services/request.ts
+--- a/admin/src/services/request.ts
++++ b/admin/src/services/request.ts
+@@ -37,15 +37,41 @@
+   return res.data;
+ }
+ 
++function apiErrorFromUnknown(error: unknown): Error {
++  const candidate = error as {
++    response?: { data?: Partial<ApiResponse<unknown>> };
++    data?: Partial<ApiResponse<unknown>>;
++    message?: string;
++  };
++  const body = candidate?.response?.data ?? candidate?.data;
++  if (body && typeof body === 'object' && typeof body.message === 'string' && body.message.trim()) {
++    return new ApiRequestError({
++      code: typeof body.code === 'number' ? body.code : -1,
++      message: body.message,
++      data: body.data,
++      traceId: body.traceId,
++    });
++  }
++  return error instanceof Error ? error : new Error(candidate?.message || 'request_failed');
++}
++
++async function apiRequest<T>(path: string, options: Parameters<typeof request>[1]): Promise<ApiResponse<T>> {
++  try {
++    return await request<ApiResponse<T>>(path, options);
++  } catch (error: unknown) {
++    throw apiErrorFromUnknown(error);
++  }
++}
++
+ /** 通用 GET（后续各模块拆分到独立 service 文件） */
+ export async function getJSON<T>(path: string): Promise<T> {
+-  const res = await request<ApiResponse<T>>(path, { method: 'GET' });
++  const res = await apiRequest<T>(path, { method: 'GET' });
+   return unwrap(res);
+ }
+ 
+ /** 通用 PUT */
+ export async function putJSON<T, B extends object>(path: string, body: B, options?: RequestOptions): Promise<T> {
+-  const res = await request<ApiResponse<T>>(path, {
++  const res = await apiRequest<T>(path, {
+     method: 'PUT',
+     data: body,
+     ...withOptions(options),
+@@ -55,7 +81,7 @@
+ 
+ /** 通用 PATCH */
+ export async function patchJSON<T, B extends object>(path: string, body: B, options?: RequestOptions): Promise<T> {
+-  const res = await request<ApiResponse<T>>(path, {
++  const res = await apiRequest<T>(path, {
+     method: 'PATCH',
+     data: body,
+     ...withOptions(options),
+@@ -65,7 +91,7 @@
+ 
+ /** 通用 POST */
+ export async function postJSON<T>(path: string, body?: object, options?: RequestOptions): Promise<T> {
+-  const res = await request<ApiResponse<T>>(path, {
++  const res = await apiRequest<T>(path, {
+     method: 'POST',
+     data: body,
+     ...withOptions(options),
+@@ -75,7 +101,7 @@
+ 
+ /** GET with query params */
+ export async function getWithParams<T>(path: string, params?: Record<string, string | number | undefined>): Promise<T> {
+-  const res = await request<ApiResponse<T>>(path, {
++  const res = await apiRequest<T>(path, {
+     method: 'GET',
+     params,
+   });
+@@ -84,13 +110,13 @@
+ 
+ /** DELETE */
+ export async function deleteJSON<T>(path: string): Promise<T> {
+-  const res = await request<ApiResponse<T>>(path, { method: 'DELETE' });
++  const res = await apiRequest<T>(path, { method: 'DELETE' });
+   return unwrap(res);
+ }
+ 
+ /** multipart/form-data（如上传）；由 request 识别 FormData，勿手动设 Content-Type */
+ export async function postFormData<T>(path: string, data: FormData): Promise<T> {
+-  const res = await request<ApiResponse<T>>(path, {
++  const res = await apiRequest<T>(path, {
+     method: 'POST',
+     data,
+   });
